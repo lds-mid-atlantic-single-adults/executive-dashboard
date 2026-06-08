@@ -1,13 +1,20 @@
 const payload = window.MASC_DASHBOARD_DATA;
 const meta = payload.metadata;
+const toNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
 const sourceRows = payload.rows.map((row) => ({
   ...row,
-  members: Number.isFinite(row.members) ? row.members : null,
-  participating: Number.isFinite(row.participating) ? row.participating : null,
-  males: Number.isFinite(row.males) ? row.males : null,
-  females: Number.isFinite(row.females) ? row.females : null,
-  participatingMales: Number.isFinite(row.participatingMales) ? row.participatingMales : null,
-  participatingFemales: Number.isFinite(row.participatingFemales) ? row.participatingFemales : null,
+  members: toNumberOrNull(row.members),
+  participating: toNumberOrNull(row.participating),
+  males: toNumberOrNull(row.males),
+  females: toNumberOrNull(row.females),
+  participatingMales: toNumberOrNull(row.participatingMales),
+  participatingFemales: toNumberOrNull(row.participatingFemales),
+  cityLatitude: toNumberOrNull(row.cityLatitude),
+  cityLongitude: toNumberOrNull(row.cityLongitude),
 }));
 
 const baselinePeriod = meta.baselinePeriod;
@@ -88,6 +95,54 @@ const DASHBOARD_VARIABLES = {
 
 window.MASC_DASHBOARD_VARIABLES = DASHBOARD_VARIABLES;
 
+const CHART_COLORS = {
+  blue: "#0d4f67",
+  teal: "#007fa3",
+  tealDark: "#006073",
+  gold: "#a3832d",
+  goldSoft: "#f2e4bf",
+  red: "#a94442",
+  green: "#2f7d59",
+  slate: "#9eb2c0",
+  soft: "#e8eff3",
+};
+
+const ICON_PATHS = {
+  landmark:
+    '<path d="M3 21h18" /><path d="M5 21V9l7-4 7 4v12" /><path d="M9 21v-7" /><path d="M15 21v-7" />',
+  dashboard:
+    '<rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />',
+  users:
+    '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />',
+  map:
+    '<path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15" /><path d="M15 6v15" />',
+  trend:
+    '<path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" />',
+  clipboard:
+    '<rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 12h6" /><path d="M9 16h4" />',
+  download:
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />',
+  target:
+    '<circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" />',
+  route:
+    '<circle cx="6" cy="18" r="3" /><circle cx="18" cy="6" r="3" /><path d="M8.5 16C14 13 10 9 15.5 7" />',
+  hand:
+    '<path d="M8 11v5a4 4 0 0 0 4 4h2a5 5 0 0 0 5-5v-3" /><path d="M8 11a2 2 0 1 1 4 0v3" /><path d="M12 11V9a2 2 0 1 1 4 0v5" /><path d="M16 12a2 2 0 1 1 4 0v2" />',
+  bridge:
+    '<path d="M3 18h18" /><path d="M5 18c1-6 5-9 7-9s6 3 7 9" /><path d="M8 18v-5" /><path d="M16 18v-5" />',
+  spark:
+    '<path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z" />',
+};
+
+const TAB_ICONS = {
+  executive: "landmark",
+  overview: "dashboard",
+  demographics: "users",
+  geography: "map",
+  time: "trend",
+  drilldown: "clipboard",
+};
+
 const fmt = new Intl.NumberFormat("en-US");
 const pctFmt = new Intl.NumberFormat("en-US", {
   style: "percent",
@@ -102,6 +157,11 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function iconSvg(name, extraClass = "") {
+  const paths = ICON_PATHS[name] || ICON_PATHS.spark;
+  return `<svg class="ui-icon${extraClass ? ` ${extraClass}` : ""}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths}</svg>`;
 }
 
 function compactLabel(value, maxLength = 28) {
@@ -125,15 +185,22 @@ function formatDeltaNumber(value) {
 
 function formatDeltaPct(value) {
   if (!Number.isFinite(value)) return "--";
-  const pp = value * 100;
-  return `${pp > 0 ? "+" : ""}${pp.toFixed(1)} pp`;
+  const points = value * 100;
+  return `${points > 0 ? "+" : ""}${points.toFixed(1)} percentage points`;
+}
+
+function formatAbsDeltaPct(value) {
+  if (!Number.isFinite(value)) return "--";
+  return `${Math.abs(value * 100).toFixed(1)} percentage points`;
 }
 
 function formatGenderGap(value) {
   if (!Number.isFinite(value)) return "--";
-  const pp = Math.abs(value * 100).toFixed(1);
+  const points = Math.abs(value * 100).toFixed(1);
   if (Math.abs(value) < 0.0001) return "Even";
-  return value > 0 ? `F +${pp} pp` : `M +${pp} pp`;
+  return value > 0
+    ? `Female +${points} percentage points`
+    : `Male +${points} percentage points`;
 }
 
 function valueClass(value) {
@@ -254,6 +321,8 @@ function unitRowsForPeriod(period) {
       stakeOrDistrict: first.stakeOrDistrict,
       state: first.state,
       city: first.city,
+      cityLatitude: first.cityLatitude,
+      cityLongitude: first.cityLongitude,
       snapshotDate: first.snapshotDate,
       sourceObject: first.sourceObject,
       sourceGrain: first.sourceGrain,
@@ -573,9 +642,9 @@ function renderCouncilScale(container, data) {
       const partWidth = (item.participating / maxMembers) * chartWidth;
       return `
         <text class="bar-label" x="0" y="${y + 15}">${escapeHtml(item.name)}</text>
-        <rect x="${labelWidth}" y="${y}" width="${chartWidth}" height="18" rx="4" fill="#e6edf3"></rect>
-        <rect x="${labelWidth}" y="${y}" width="${membersWidth}" height="18" rx="4" fill="#b8cbd6"></rect>
-        <rect x="${labelWidth}" y="${y}" width="${partWidth}" height="18" rx="4" fill="#168a8f"></rect>
+        <rect x="${labelWidth}" y="${y}" width="${chartWidth}" height="18" rx="4" fill="${CHART_COLORS.soft}"></rect>
+        <rect x="${labelWidth}" y="${y}" width="${membersWidth}" height="18" rx="4" fill="${CHART_COLORS.slate}"></rect>
+        <rect x="${labelWidth}" y="${y}" width="${partWidth}" height="18" rx="4" fill="${CHART_COLORS.teal}"></rect>
         <text class="bar-value" x="${labelWidth + chartWidth + 16}" y="${y + 15}">${formatNumber(item.participating)} / ${formatNumber(item.members)}</text>
         <text class="axis-label" x="${labelWidth}" y="${y + 36}">${formatPercent(item.rate)}</text>
       `;
@@ -602,7 +671,8 @@ function renderHorizontalBars(container, data, options = {}) {
   const rowHeight = 42;
   const height = visible.length * rowHeight + 28;
   const labelWidth = options.labelWidth || 210;
-  const chartWidth = width - labelWidth - 96;
+  const valueLabelWidth = options.valueLabelWidth || 116;
+  const chartWidth = width - labelWidth - valueLabelWidth;
   const absolute = options.absolute || false;
   const maxValue =
     options.maxValue || Math.max(...visible.map((item) => (absolute ? Math.abs(item.value) : item.value)), 1);
@@ -615,11 +685,16 @@ function renderHorizontalBars(container, data, options = {}) {
       const magnitude = Math.max((Math.abs(item.value) / maxValue) * scaleWidth, item.value ? 2 : 0);
       const x = absolute && item.value < 0 ? zeroX - magnitude : zeroX;
       const color =
-        item.color || (absolute ? (item.value >= 0 ? "#168a8f" : "#b84a4a") : options.color || "#168a8f");
+        item.color ||
+        (absolute
+          ? item.value >= 0
+            ? CHART_COLORS.teal
+            : CHART_COLORS.red
+          : options.color || CHART_COLORS.teal);
       const label = compactLabel(item.name, options.maxLabelLength || 30);
       return `
         <text class="bar-label" x="0" y="${y + 14}">${escapeHtml(label)}</text>
-        <rect x="${labelWidth}" y="${y}" width="${chartWidth}" height="16" rx="4" fill="#edf2f6"></rect>
+        <rect x="${labelWidth}" y="${y}" width="${chartWidth}" height="16" rx="4" fill="${CHART_COLORS.soft}"></rect>
         ${absolute ? `<line x1="${zeroX}" x2="${zeroX}" y1="${y - 3}" y2="${y + 19}" stroke="#d4dee7"></line>` : ""}
         <rect x="${x}" y="${y}" width="${magnitude}" height="16" rx="4" fill="${color}"></rect>
         <text class="bar-value" x="${labelWidth + chartWidth + 14}" y="${y + 13}">${options.formatter ? options.formatter(item.value) : formatNumber(item.value)}</text>
@@ -666,8 +741,8 @@ function renderPeriodComparison(container, latestSummary, baselineSummary) {
       const latestHeight = ((group.latest || 0) / max) * maxHeight;
       return `
         <text class="bar-label" x="${x}" y="28">${group.label}</text>
-        <rect x="${x + 6}" y="${originY - baseHeight}" width="38" height="${baseHeight}" rx="5" fill="#b8cbd6"></rect>
-        <rect x="${x + 52}" y="${originY - latestHeight}" width="38" height="${latestHeight}" rx="5" fill="#168a8f"></rect>
+        <rect x="${x + 6}" y="${originY - baseHeight}" width="38" height="${baseHeight}" rx="5" fill="${CHART_COLORS.slate}"></rect>
+        <rect x="${x + 52}" y="${originY - latestHeight}" width="38" height="${latestHeight}" rx="5" fill="${CHART_COLORS.teal}"></rect>
         <text class="axis-label" x="${x + 6}" y="${originY + 22}">${baselinePeriod}</text>
         <text class="axis-label" x="${x + 52}" y="${originY + 22}">${latestPeriod}</text>
         <text class="bar-value" x="${x + 6}" y="${originY - baseHeight - 8}">${group.formatter(group.baseline)}</text>
@@ -749,6 +824,102 @@ function renderExecutiveSegmentRows(segments) {
         <td>${formatNumber(segment.members)}</td>
         <td><span class="rate-pill${rateClass(segment.rate)}">${formatPercent(segment.rate)}</span></td>
         <td class="text">${escapeHtml(segment.meaning)}</td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function actionOutcomeData(latest, segments) {
+  const dropoffs = ageDropoffData(segments);
+  const biggestDrop = dropoffs
+    .filter((item) => Number.isFinite(item.change) && item.change < 0)
+    .sort((a, b) => a.change - b.change)[0];
+  const lowRateUnits = latest.filter((row) => Number.isFinite(row.rate) && row.rate < 0.12);
+  const farUnits = latest.filter((row) => distanceTierRank(row.councilDistanceTier) >= 3);
+  const farSummary = summarize(farUnits);
+  const executionGaps = latest.filter(
+    (row) => row.isolationVsPerformance === "Low isolation / Low participation"
+  );
+  const highDistanceLow = latest.filter(
+    (row) => row.isolationVsPerformance === "High isolation / Low participation"
+  );
+  const resilient = latest.filter(
+    (row) => row.isolationVsPerformance === "High isolation / High participation"
+  );
+  const olderSingles = segments.find((segment) => segment.segmentId === "singles46plus");
+
+  return [
+    {
+      icon: "bridge",
+      action: "Repair the age-bucket handoff",
+      need: biggestDrop
+        ? `${biggestDrop.to.name} is ${formatAbsDeltaPct(
+            biggestDrop.change
+          )} lower than ${biggestDrop.from.name}.`
+        : "No adult age-bucket drop-off is visible yet; keep monitoring the handoffs.",
+      outcome: "Keep adults participating as they move from one life stage to the next.",
+      proof: biggestDrop
+        ? `${biggestDrop.to.name} participation rises from ${formatPercent(
+            biggestDrop.to.rate
+          )}, and the drop-off gets smaller over time.`
+        : "The age-bucket trend remains stable or improves over time.",
+    },
+    {
+      icon: "target",
+      action: "Prioritize low-rate units first",
+      need: `${formatNumber(lowRateUnits.length)} units are below 12% participation in the current selection.`,
+      outcome: "Move the bottom of the portfolio, where a few more participating adults can materially lift the rate.",
+      proof: "The count of units below 12% falls, and the bottom-line participation rate rises.",
+    },
+    {
+      icon: "route",
+      action: "Localize or cluster high-distance units",
+      need: `${formatNumber(farSummary.units)} units are at least 40 miles from the council centroid; ${formatNumber(
+        highDistanceLow.length
+      )} also have low participation.`,
+      outcome: "Reduce travel friction through nearby gatherings, rotating locations, and cross-stake clusters.",
+      proof: `40+ mile unit participation improves from ${formatPercent(
+        farSummary.rate
+      )}, with more participating adults in those units.`,
+    },
+    {
+      icon: "users",
+      action: "Design a 46+ male re-engagement play",
+      need: `Singles 46+ show ${formatGenderGap(
+        olderSingles?.genderGap
+      )} between female and male participation rates.`,
+      outcome: "Increase belonging and participation among older single men instead of relying on general adult programming.",
+      proof: `The 46+ male rate rises from ${formatPercent(
+        olderSingles?.maleRate
+      )}, and the gender gap narrows.`,
+    },
+    {
+      icon: "hand",
+      action: "Pair strong outliers with execution-gap units",
+      need: `${formatNumber(resilient.length)} high-distance units are still participating well; ${formatNumber(
+        executionGaps.length
+      )} nearby-access units are underperforming.`,
+      outcome: "Transfer repeatable practices from units succeeding despite constraints into units where execution is the barrier.",
+      proof: "Execution-gap units improve, and resilient practices show up in stake-rep feedback.",
+    },
+  ];
+}
+
+function renderActionOutcomeRows(rows) {
+  $("#actionOutcomeRows").innerHTML = rows
+    .map(
+      (row) => `
+      <tr>
+        <td class="text">
+          <span class="action-cell">
+            <span class="action-icon">${iconSvg(row.icon)}</span>
+            <span>${escapeHtml(row.action)}</span>
+          </span>
+        </td>
+        <td class="text">${escapeHtml(row.need)}</td>
+        <td class="text">${escapeHtml(row.outcome)}</td>
+        <td class="text">${escapeHtml(row.proof)}</td>
       </tr>
     `
     )
@@ -870,6 +1041,7 @@ function renderExecutive() {
       meaning: segment.meaning,
     }))
   );
+  renderActionOutcomeRows(actionOutcomeData(latest, segments));
 
   $("#executiveCouncilSubtitle").textContent = `${latestPeriod}; ${ageSegmentInfo().label}`;
   renderHorizontalBars(
@@ -882,7 +1054,7 @@ function renderExecutive() {
       width: 520,
       labelWidth: 198,
       maxLabelLength: 23,
-      color: "#c9962c",
+      color: CHART_COLORS.gold,
     }
   );
 }
@@ -995,7 +1167,7 @@ function renderDemographics() {
     segmentData.map((item) => ({
       name: item.name,
       value: item.rate,
-      color: item.segmentId === "singleAdults" ? "#c9962c" : "#168a8f",
+      color: item.segmentId === "singleAdults" ? CHART_COLORS.gold : CHART_COLORS.teal,
     })),
     {
       label: "Age segment participation",
@@ -1014,8 +1186,9 @@ function renderDemographics() {
       formatter: formatGenderGap,
       absolute: true,
       maxValue: maxGap,
-      width: 520,
+      width: 660,
       labelWidth: 134,
+      valueLabelWidth: 214,
       maxLabelLength: 18,
     }
   );
@@ -1057,6 +1230,136 @@ function renderPriorityUnitRows(rows) {
     `
     )
     .join("");
+}
+
+function mapRateColor(rate) {
+  if (!Number.isFinite(rate)) return CHART_COLORS.slate;
+  if (rate < 0.12) return CHART_COLORS.red;
+  if (rate < 0.2) return CHART_COLORS.gold;
+  return CHART_COLORS.teal;
+}
+
+function stableHash(value) {
+  return String(value || "").split("").reduce((hash, char) => {
+    return (hash * 31 + char.charCodeAt(0)) % 9973;
+  }, 7);
+}
+
+function renderParticipationMap(container, rows) {
+  const points = rows.filter(
+    (row) =>
+      Number.isFinite(row.cityLatitude) &&
+      Number.isFinite(row.cityLongitude) &&
+      Number.isFinite(row.rate)
+  );
+  if (!points.length) {
+    container.innerHTML = chartEmpty("No geocoded unit participation in the current selection");
+    return;
+  }
+
+  const width = 920;
+  const height = 450;
+  const pad = 42;
+  const lats = points.map((point) => point.cityLatitude);
+  const lons = points.map((point) => point.cityLongitude);
+  const minLat = Math.min(...lats) - 0.35;
+  const maxLat = Math.max(...lats) + 0.35;
+  const minLon = Math.min(...lons) - 0.55;
+  const maxLon = Math.max(...lons) + 0.55;
+  const maxMembers = Math.max(...points.map((point) => point.members || 0), 1);
+
+  const project = (lon, lat) => ({
+    x: pad + ((lon - minLon) / (maxLon - minLon || 1)) * (width - pad * 2),
+    y: height - pad - ((lat - minLat) / (maxLat - minLat || 1)) * (height - pad * 2),
+  });
+
+  const labels = [
+    { name: "New York", lat: 41.3, lon: -74.6 },
+    { name: "New Jersey", lat: 40.1, lon: -74.6 },
+    { name: "Pennsylvania", lat: 40.2, lon: -77.4 },
+    { name: "Delaware", lat: 39.1, lon: -75.5 },
+    { name: "Maryland", lat: 39.1, lon: -76.8 },
+    { name: "D.C.", lat: 38.9, lon: -77.0 },
+    { name: "Virginia", lat: 38.2, lon: -77.7 },
+  ]
+    .filter((label) => label.lat >= minLat && label.lat <= maxLat && label.lon >= minLon && label.lon <= maxLon)
+    .map((label) => {
+      const { x, y } = project(label.lon, label.lat);
+      return `<text class="map-label" x="${x}" y="${y}">${escapeHtml(label.name)}</text>`;
+    })
+    .join("");
+
+  const heat = points
+    .map((point, index) => {
+      const base = project(point.cityLongitude, point.cityLatitude);
+      const hash = stableHash(point.unitJoinKey || point.unitName);
+      const angle = (hash % 360) * (Math.PI / 180);
+      const offset = (hash % 7) + (index % 3);
+      const x = base.x + Math.cos(angle) * offset;
+      const y = base.y + Math.sin(angle) * offset;
+      const color = mapRateColor(point.rate);
+      const radius = 11 + Math.sqrt((point.members || 0) / maxMembers) * 30;
+      return `
+        <circle class="map-heat" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(
+          1
+        )}" fill="${color}"></circle>
+      `;
+    })
+    .join("");
+
+  const dots = points
+    .map((point, index) => {
+      const base = project(point.cityLongitude, point.cityLatitude);
+      const hash = stableHash(point.unitJoinKey || point.unitName);
+      const angle = (hash % 360) * (Math.PI / 180);
+      const offset = (hash % 7) + (index % 3);
+      const x = base.x + Math.cos(angle) * offset;
+      const y = base.y + Math.sin(angle) * offset;
+      const color = mapRateColor(point.rate);
+      const radius = 3.5 + Math.sqrt((point.members || 0) / maxMembers) * 5.5;
+      return `
+        <circle class="map-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${radius.toFixed(
+          1
+        )}" fill="${color}">
+          <title>${escapeHtml(point.unitName)} (${escapeHtml(point.city || "--")}): ${formatPercent(
+            point.rate
+          )}; ${formatNumber(point.participating)} of ${formatNumber(point.members)} participating</title>
+        </circle>
+      `;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <svg class="participation-map" viewBox="0 0 ${width} ${height}" role="img" aria-label="Unit participation heatmap by city">
+      <rect class="map-bg" x="0" y="0" width="${width}" height="${height}" rx="8"></rect>
+      <path class="map-coast" d="M760 40 C735 100 725 150 744 204 C765 264 738 306 760 398"></path>
+      <path class="map-river" d="M485 85 C520 140 516 198 555 250 C590 295 586 350 625 405"></path>
+      <path class="map-river" d="M655 92 C620 150 618 205 655 252 C688 292 686 346 712 398"></path>
+      <g class="map-grid">
+        <line x1="140" x2="140" y1="38" y2="410"></line>
+        <line x1="300" x2="300" y1="38" y2="410"></line>
+        <line x1="460" x2="460" y1="38" y2="410"></line>
+        <line x1="620" x2="620" y1="38" y2="410"></line>
+        <line x1="780" x2="780" y1="38" y2="410"></line>
+        <line x1="44" x2="876" y1="130" y2="130"></line>
+        <line x1="44" x2="876" y1="230" y2="230"></line>
+        <line x1="44" x2="876" y1="330" y2="330"></line>
+      </g>
+      <g>${labels}</g>
+      <g>${heat}</g>
+      <g>${dots}</g>
+      <g class="map-legend" transform="translate(48 382)">
+        <rect x="0" y="-24" width="348" height="50" rx="8"></rect>
+        <circle cx="20" cy="0" r="7" fill="${CHART_COLORS.red}"></circle>
+        <text x="34" y="4">Lower participation</text>
+        <circle cx="158" cy="0" r="7" fill="${CHART_COLORS.gold}"></circle>
+        <text x="172" y="4">Middle</text>
+        <circle cx="244" cy="0" r="7" fill="${CHART_COLORS.teal}"></circle>
+        <text x="258" y="4">Higher</text>
+        <text class="map-legend-note" x="0" y="22">Circle size reflects member count; color reflects participation rate.</text>
+      </g>
+    </svg>
+  `;
 }
 
 function renderGeography() {
@@ -1132,12 +1435,16 @@ function renderGeography() {
   ]);
 
   $("#distanceTierSubtitle").textContent = `${latestPeriod}; ${ageSegmentInfo().label}`;
+  $("#participationMapSubtitle").textContent = `${latestPeriod}; ${formatNumber(
+    latest.filter((row) => Number.isFinite(row.cityLatitude) && Number.isFinite(row.cityLongitude)).length
+  )} geocoded units; ${ageSegmentInfo().label}`;
+  renderParticipationMap($("#participationMap"), latest);
   renderHorizontalBars(
     $("#distanceTierChart"),
     distanceData.map((item) => ({
       name: item.name,
       value: item.rate,
-      color: distanceTierRank(item.name) >= 3 ? "#c9962c" : "#168a8f",
+      color: distanceTierRank(item.name) >= 3 ? CHART_COLORS.gold : CHART_COLORS.teal,
     })),
     {
       label: "Participation by distance tier",
@@ -1260,7 +1567,8 @@ function renderTime() {
       absolute: true,
       maxValue: Math.max(...councilComparisons.map((item) => Math.abs(item.deltaRate || 0)), 0.01),
       labelWidth: 210,
-      width: 760,
+      valueLabelWidth: 184,
+      width: 840,
     }
   );
   renderHorizontalBars(
@@ -1271,8 +1579,9 @@ function renderTime() {
       formatter: formatDeltaPct,
       absolute: true,
       maxValue: Math.max(...stakeComparisons.map((item) => Math.abs(item.deltaRate || 0)), 0.01),
-      width: 520,
+      width: 680,
       labelWidth: 218,
+      valueLabelWidth: 184,
       maxLabelLength: 25,
     }
   );
@@ -1433,7 +1742,7 @@ function renderFilteredAgePattern() {
     ageData.map((item) => ({
       name: item.name,
       value: item.rate,
-      color: item.segmentId === "singleAdults" ? "#c9962c" : "#168a8f",
+      color: item.segmentId === "singleAdults" ? CHART_COLORS.gold : CHART_COLORS.teal,
     })),
     {
       label: "Filtered age segment participation pattern",
@@ -1502,7 +1811,7 @@ function renderOverview() {
       width: 520,
       labelWidth: 198,
       maxLabelLength: 23,
-      color: "#c9962c",
+      color: CHART_COLORS.gold,
     }
   );
   renderCouncilSummary(councilLatest);
@@ -1538,8 +1847,9 @@ function renderDrilldown() {
     formatter: formatDeltaPct,
     absolute: true,
     maxValue: Math.max(...stakeComparisons.map((item) => Math.abs(item.value || 0)), 0.01),
-    width: 520,
+    width: 680,
     labelWidth: 218,
+    valueLabelWidth: 184,
     maxLabelLength: 25,
   });
   renderFilteredAgePattern();
@@ -1561,6 +1871,20 @@ function render() {
   renderTime();
   renderDrilldown();
   renderSource();
+}
+
+function decorateInterfaceIcons() {
+  document.querySelectorAll(".tab").forEach((tab) => {
+    const iconName = TAB_ICONS[tab.dataset.tab];
+    if (iconName && !tab.querySelector(".ui-icon")) {
+      tab.insertAdjacentHTML("afterbegin", iconSvg(iconName));
+    }
+  });
+
+  const downloadButton = $("#downloadCsv");
+  if (downloadButton && !downloadButton.querySelector(".ui-icon")) {
+    downloadButton.insertAdjacentHTML("afterbegin", iconSvg("download"));
+  }
 }
 
 function wireTabs() {
@@ -1628,6 +1952,7 @@ function wireDownload() {
   });
 }
 
+decorateInterfaceIcons();
 wireTabs();
 wireFilters();
 wireDownload();

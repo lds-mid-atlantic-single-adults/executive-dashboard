@@ -10,10 +10,15 @@
   <body>
     <div class="app-shell">
       <aside class="rail" aria-label="Dashboard identity">
-        <div class="mark" aria-hidden="true">MA</div>
-        <div>
-          <p class="rail-title">Mid-Atlantic</p>
-          <p class="rail-subtitle">Singles Council</p>
+        <div class="church-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" class="church-mark-icon" focusable="false">
+            <path d="M10 38h28M15 38V20l9-8 9 8v18M21 38V27h6v11M24 12V6M20 6h8" />
+          </svg>
+        </div>
+        <div class="rail-copy">
+          <p class="rail-kicker">The Church of Jesus Christ of Latter-day Saints</p>
+          <p class="rail-title">Mid-Atlantic Singles Council</p>
+          <p class="rail-subtitle">Executive participation dashboard</p>
         </div>
       </aside>
 
@@ -71,7 +76,7 @@
                 </div>
               </div>
               <div class="table-wrap">
-                <table>
+                <table class="wide-table">
                   <thead>
                     <tr>
                       <th class="text">Executive Question</th>
@@ -81,6 +86,28 @@
                     </tr>
                   </thead>
                   <tbody id="executivePriorityRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="chart-panel full">
+              <div class="panel-heading">
+                <div>
+                  <h2>Actions That Move Outcomes</h2>
+                  <p>Clear leadership plays, the need they address, and the dashboard signal that should move</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="action-table wide-table">
+                  <thead>
+                    <tr>
+                      <th class="text">Action</th>
+                      <th class="text">Need It Addresses</th>
+                      <th class="text">Outcome To Move</th>
+                      <th class="text">How To Know It Worked</th>
+                    </tr>
+                  </thead>
+                  <tbody id="actionOutcomeRows"></tbody>
                 </table>
               </div>
             </article>
@@ -312,6 +339,16 @@
                   <tbody id="archetypeRows"></tbody>
                 </table>
               </div>
+            </article>
+
+            <article class="chart-panel full">
+              <div class="panel-heading">
+                <div>
+                  <h2>Unit Participation Heatmap</h2>
+                  <p id="participationMapSubtitle"></p>
+                </div>
+              </div>
+              <div id="participationMap" class="chart-body map-body"></div>
             </article>
 
             <article class="chart-panel full">
