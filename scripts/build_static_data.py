@@ -69,6 +69,32 @@ def unique_sorted(values: list[str]) -> list[str]:
     return sorted(set(values), key=lambda value: value.lower())
 
 
+def age_group_rank(age_group: str | None) -> int:
+    if age_group == "0-17":
+        return 0
+    if age_group == "18-25":
+        return 18
+    if age_group == "26-35":
+        return 26
+    if age_group == "36-45":
+        return 36
+    if age_group == "46-55":
+        return 46
+    if age_group == "56-65":
+        return 56
+    if age_group == "66-75":
+        return 66
+    if age_group == "76+":
+        return 76
+    return 999
+
+
+def include_adult_row(row: dict[str, Any]) -> bool:
+    if row.get("sourceGrain") != "age_group":
+        return True
+    return age_group_rank(row.get("ageGroup")) >= 18
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--raw", default=str(DATA_DIR / "sql-source-rows.json"))
@@ -76,7 +102,7 @@ def main() -> None:
 
     raw_path = Path(args.raw)
     payload = json.loads(raw_path.read_text(encoding="utf-8-sig"))
-    rows = [normalize_row(row) for row in payload["rows"]]
+    rows = [row for row in (normalize_row(row) for row in payload["rows"]) if include_adult_row(row)]
 
     periods = sorted(
         {
@@ -114,36 +140,43 @@ def main() -> None:
         "periods": period_records,
         "baselinePeriod": period_records[0]["period"] if period_records else None,
         "latestPeriod": period_records[-1]["period"] if period_records else None,
-        "defaultAgeScope": "26plus",
+        "defaultAgeScope": "allAdults",
         "ageScopes": [
             {
-                "id": "26plus",
-                "label": "26+ adult proxy",
-                "description": "Uses 2026 age groups 26-35 and older. 2025 Q3 has no age-group field, so it remains unchanged.",
+                "id": "allAdults",
+                "label": "All singles 18+",
+                "description": "Excludes 2026 rows for ages 0-17. 2025 Q3 has no age-group field, so prior comparison remains unit-level.",
             },
             {
-                "id": "18plus",
-                "label": "18+ adult view",
-                "description": "Uses 2026 age groups 18-25 and older. 2025 Q3 has no age-group field, so it remains unchanged.",
+                "id": "ysa",
+                "label": "Young Single Adults (18-35)",
+                "description": "Uses 2026 age groups 18-25 and 26-35. 2025 Q3 has no age-group field, so prior comparison remains unit-level.",
             },
             {
-                "id": "all",
-                "label": "All 2026 age groups",
-                "description": "Includes the 2026 0-17 age group. This is not the recommended comparison for single-adult review.",
+                "id": "singleAdults",
+                "label": "Single Adults (36-45)",
+                "description": "Uses the 2026 age group 36-45. 2025 Q3 has no age-group field, so prior comparison remains unit-level.",
+            },
+            {
+                "id": "singles46plus",
+                "label": "Singles (46+)",
+                "description": "Uses 2026 age groups 46-55 and older. 2025 Q3 has no age-group field, so prior comparison remains unit-level.",
             },
         ],
         "methodology": (
             "The dashboard is built from SQL Server BV.masc tables whose names include "
             "mid-atlantic-singles-council. 2025 Q3 rows are already unit-level. 2026 Q1 "
-            "rows are age-group level and are aggregated to unit, stake, and council "
-            "inside the dashboard based on the selected age scope. Rates are recomputed "
+            "rows are age-group level; ages 0-17 are excluded before dashboard export. "
+            "Adult rows are aggregated to unit, stake, and council inside the dashboard "
+            "based on the selected age segment. Rates are recomputed "
             "from summed participating and member counts."
         ),
         "caveat": (
             "The available SQL sources are 2025 Q3 and 2026 Q1, so the comparison is a "
             "snapshot-over-snapshot year assessment rather than same-quarter YoY. The "
-            "2026 source includes age groups, including 0-17; the default 26+ scope is "
-            "the closest available adult proxy, not an exact age >= 28 filter."
+            "2026 source includes adult age groups; the dashboard excludes ages 0-17. "
+            "The 2025 Q3 source has no age-group field, so age-segment filters apply "
+            "to the current 2026 snapshot and not to the prior unit-level source."
         ),
     }
 

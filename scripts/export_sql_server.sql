@@ -82,6 +82,7 @@ WITH source_rows AS (
         CAST([City Latitude] AS float) AS cityLatitude,
         CAST([City Longitude] AS float) AS cityLongitude
     FROM masc.[mid-atlantic-singles-council-2026-q1_cleaned]
+    WHERE LTRIM(RTRIM([Age Group])) <> N'0-17'
 )
 SELECT
     period,

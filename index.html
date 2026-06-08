@@ -51,7 +51,7 @@
 
         <section class="filters scope-controls" aria-label="Comparison controls">
           <label>
-            <span>Age Scope</span>
+            <span>Age Segment</span>
             <select id="ageScopeFilter"></select>
           </label>
           <div class="scope-note" id="ageScopeNote"></div>
@@ -66,17 +66,18 @@
             <article class="chart-panel full">
               <div class="panel-heading">
                 <div>
-                  <h2>Leadership Decision Frame</h2>
-                  <p>Priority signals and operating response</p>
+                  <h2>Council Value Proof Model</h2>
+                  <p>Mapped from the Stake Rep Tracker executive assessment</p>
                 </div>
               </div>
               <div class="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th class="text">Priority</th>
-                      <th class="text">Signal</th>
-                      <th class="text">Operating Response</th>
+                      <th class="text">Executive Question</th>
+                      <th class="text">Tracker Evidence</th>
+                      <th class="text">Current Signal</th>
+                      <th class="text">Status</th>
                     </tr>
                   </thead>
                   <tbody id="executivePriorityRows"></tbody>
@@ -97,8 +98,8 @@
             <article class="chart-panel">
               <div class="panel-heading">
                 <div>
-                  <h2>Priority Segments</h2>
-                  <p>Latest period age and gender signals</p>
+                  <h2>Age Segments</h2>
+                  <p>Under-18 rows excluded from the adult dashboard</p>
                 </div>
               </div>
               <div class="table-wrap">
@@ -207,7 +208,7 @@
             <article class="chart-panel wide">
               <div class="panel-heading">
                 <div>
-                  <h2>Age Participation Curve</h2>
+                  <h2>Age Segment Participation</h2>
                   <p id="ageCurveSubtitle"></p>
                 </div>
               </div>
@@ -217,8 +218,8 @@
             <article class="chart-panel">
               <div class="panel-heading">
                 <div>
-                  <h2>Gender Gap By Age</h2>
-                  <p>Female minus male participation rate</p>
+                  <h2>Gender Gap By Segment</h2>
+                  <p>Female minus male participation rate by adult segment</p>
                 </div>
               </div>
               <div id="genderGapChart" class="chart-body compact"></div>
@@ -228,14 +229,14 @@
               <div class="panel-heading">
                 <div>
                   <h2>Age And Gender Summary</h2>
-                  <p>Latest period source rows</p>
+                  <p>Latest period adult source rows</p>
                 </div>
               </div>
               <div class="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th class="text">Age Group</th>
+                      <th class="text">Age Segment</th>
                       <th>Members</th>
                       <th>Participating</th>
                       <th>Rate</th>

@@ -14,7 +14,7 @@ const baselinePeriod = meta.baselinePeriod;
 const latestPeriod = meta.latestPeriod;
 const state = {
   activeTab: "executive",
-  ageScope: meta.defaultAgeScope || "26plus",
+  ageScope: meta.defaultAgeScope || "allAdults",
   council: "All councils",
   stake: "All stakes / districts",
   query: "",
@@ -27,6 +27,39 @@ const ARCHETYPE_STRATEGIES = {
   "High isolation / Low participation": "Reduce friction",
   "High isolation / High participation": "Protect and learn",
 };
+
+const AGE_SEGMENTS = [
+  {
+    id: "ysa",
+    label: "Young Single Adults (18-35)",
+    shortLabel: "YSA 18-35",
+    description: "Young Single Adults, ages 18-35.",
+    minRank: 18,
+    maxRank: 26,
+    rank: 1,
+    meaning: "Young adult handoff, transition, and early retention.",
+  },
+  {
+    id: "singleAdults",
+    label: "Single Adults (36-45)",
+    shortLabel: "SA 36-45",
+    description: "Single Adults, ages 36-45.",
+    minRank: 36,
+    maxRank: 36,
+    rank: 2,
+    meaning: "Midlife engagement trough and focused reactivation.",
+  },
+  {
+    id: "singles46plus",
+    label: "Singles (46+)",
+    shortLabel: "Singles 46+",
+    description: "Singles, ages 46 and older.",
+    minRank: 46,
+    maxRank: Infinity,
+    rank: 3,
+    meaning: "Older adult connection, male re-engagement, and durable belonging.",
+  },
+];
 
 const fmt = new Intl.NumberFormat("en-US");
 const pctFmt = new Intl.NumberFormat("en-US", {
@@ -130,12 +163,23 @@ function ageGroupRank(ageGroup) {
   return 999;
 }
 
+function ageSegmentForRank(rank) {
+  if (!Number.isFinite(rank) || rank < 18) return null;
+  return AGE_SEGMENTS.find((segment) => rank >= segment.minRank && rank <= segment.maxRank) || null;
+}
+
+function ageSegmentForGroup(ageGroup) {
+  return ageSegmentForRank(ageGroupRank(ageGroup));
+}
+
 function rowIncludedByAge(row) {
   if (row.sourceGrain !== "age_group") return true;
   const rank = ageGroupRank(row.ageGroup);
-  if (state.ageScope === "all") return true;
-  if (state.ageScope === "18plus") return rank >= 18;
-  return rank >= 26;
+  if (rank < 18) return false;
+  if (state.ageScope === "ysa") return rank >= 18 && rank <= 26;
+  if (state.ageScope === "singleAdults") return rank === 36;
+  if (state.ageScope === "singles46plus") return rank >= 46;
+  return rank >= 18;
 }
 
 function groupBy(items, key) {
@@ -259,7 +303,12 @@ function aggregate(items, key) {
 }
 
 function latestAgeSourceRows() {
-  return sourceRows.filter((row) => row.period === latestPeriod && row.sourceGrain === "age_group");
+  return sourceRows.filter(
+    (row) =>
+      row.period === latestPeriod &&
+      row.sourceGrain === "age_group" &&
+      ageGroupRank(row.ageGroup) >= 18
+  );
 }
 
 function ageGenderData(items = latestAgeSourceRows()) {
@@ -272,6 +321,22 @@ function ageGenderData(items = latestAgeSourceRows()) {
       ...summarizeSourceRows(groupRows),
     }))
     .sort((a, b) => a.rank - b.rank);
+}
+
+function ageSegmentData(items = latestAgeSourceRows()) {
+  return AGE_SEGMENTS.map((segment) => {
+    const groupRows = items.filter((row) => ageSegmentForGroup(row.ageGroup)?.id === segment.id);
+    return {
+      name: segment.shortLabel,
+      label: segment.label,
+      ageGroup: segment.label,
+      segmentId: segment.id,
+      rank: segment.rank,
+      meaning: segment.meaning,
+      rows: groupRows,
+      ...summarizeSourceRows(groupRows),
+    };
+  });
 }
 
 function segmentSummary(label, items) {
@@ -584,9 +649,10 @@ function renderExecutivePriorityRows(rows) {
     .map(
       (row) => `
       <tr>
-        <td class="text">${escapeHtml(row.priority)}</td>
+        <td class="text">${escapeHtml(row.question)}</td>
+        <td class="text">${escapeHtml(row.evidence)}</td>
         <td class="text">${escapeHtml(row.signal)}</td>
-        <td class="text">${escapeHtml(row.response)}</td>
+        <td class="text">${escapeHtml(row.status)}</td>
       </tr>
     `
     )
@@ -614,24 +680,8 @@ function renderExecutive() {
   const latestSummary = summarize(latest);
   const priorSummary = summarize(prior);
   const ageRows = latestAgeSourceRows();
-  const ageData = ageGenderData(ageRows);
-  const age36to45 = ageData.find((item) => item.ageGroup === "36-45");
-  const age26to55 = segmentSummary(
-    "Ages 26-55",
-    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 26 && ageGroupRank(row.ageGroup) <= 46)
-  );
-  const age18to45 = segmentSummary(
-    "Ages 18-45",
-    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 18 && ageGroupRank(row.ageGroup) <= 36)
-  );
-  const age46Plus = segmentSummary(
-    "Ages 46+",
-    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 46)
-  );
-  const constrained = latest.filter(
-    (row) => row.isolationVsPerformance === "High isolation / Low participation"
-  );
-  const constrainedSummary = summarize(constrained);
+  const segments = ageSegmentData(ageRows);
+  const olderSingles = segments.find((segment) => segment.segmentId === "singles46plus");
   const councilLatest = aggregate(latest, "coordinatingCouncil").sort((a, b) => b.rate - a.rate);
   const leadingCouncil = councilLatest[0];
   const trailingCouncil = councilLatest[councilLatest.length - 1];
@@ -642,124 +692,103 @@ function renderExecutive() {
 
   $("#executiveKpis").innerHTML = [
     kpiCard(
-      "Corridor Rate",
+      "Adult Participation",
       formatPercent(latestSummary.rate),
-      `${formatNumber(latestSummary.participating)} of ${formatNumber(latestSummary.members)} participating`,
+      `${formatNumber(latestSummary.participating)} of ${formatNumber(latestSummary.members)} singles 18+ participating`,
       {
         value: rateDelta,
         label: `${formatDeltaPct(rateDelta)} vs ${baselinePeriod}`,
       }
     ),
     kpiCard(
-      "Midlife Trough",
-      formatPercent(age36to45?.rate),
-      `Ages 36-45; ${formatNumber(age36to45?.members)} members`,
+      "Tracker Scope",
+      "5 areas",
+      "Community, spirituality, relationships, council impact, feedback",
+      null
+    ),
+    kpiCard(
+      "Council Impact Items",
+      "3 measures",
+      "Coordination, new opportunities, and overall value",
       null
     ),
     kpiCard(
       "46+ Gender Gap",
-      formatGenderGap(age46Plus.genderGap),
-      "Female minus male participation rate",
+      formatGenderGap(olderSingles?.genderGap),
+      "Female minus male participation rate among Singles 46+",
       {
-        value: age46Plus.genderGap,
-        label: `${formatPercent(age46Plus.femaleRate)} female; ${formatPercent(age46Plus.maleRate)} male`,
+        value: olderSingles?.genderGap,
+        label: `${formatPercent(olderSingles?.femaleRate)} female; ${formatPercent(olderSingles?.maleRate)} male`,
       }
-    ),
-    kpiCard(
-      "Constrained Units",
-      formatNumber(constrainedSummary.units),
-      `${formatPercent(constrainedSummary.rate)} participation; ${formatNumber(constrainedSummary.members)} members`,
-      null
     ),
   ].join("");
 
   $("#executiveNarrative").innerHTML = [
     storyCard(
-      "State Of Singles",
+      "Executive Brief Question",
+      "Is the council valuable, and is it making a measurable difference for adult singles across stakes?",
+      "Stake Rep Tracker proof frame"
+    ),
+    storyCard(
+      "What We Can Prove Today",
       `${formatNumber(latestSummary.units)} units across ${formatNumber(
         latestSummary.stakes
-      )} stakes or districts are represented in the current ${ageScopeInfo().label}.`,
-      `${latestPeriod} source snapshot`
+      )} stakes or districts are represented after excluding under-18 rows; participation movement is visible by council, stake, and unit.`,
+      `${latestPeriod} adult source snapshot`
     ),
     storyCard(
-      "What Senior Leaders Should See",
-      `${leadingCouncil?.name} leads at ${formatPercent(
-        leadingCouncil?.rate
-      )}; ${trailingCouncil?.name} trails at ${formatPercent(
-        trailingCouncil?.rate
-      )}. The ${age36to45?.ageGroup || "36-45"} band is the clearest participation trough.`,
-      "Uneven outcomes, structured constraints"
-    ),
-    storyCard(
-      "Where Action Should Focus",
-      `Treat ${formatPercent(age18to45.rate)} participation among ages 18-45, ${formatGenderGap(
-        age46Plus.genderGap
-      )} among ages 46+, and ${formatNumber(
-        constrainedSummary.units
-      )} high-isolation / low-participation units as the shared operating problem.`,
-      "Age, gender, and geography together"
+      "What The Tracker Adds",
+      "Stake reps will answer whether singles are more connected, spiritually engaged, forming relationships, and seeing council-created opportunities that would not otherwise exist.",
+      "Repeated periodically for time over time proof"
     ),
   ].join("");
 
   renderExecutivePriorityRows([
     {
-      priority: "Midlife re-engagement",
-      signal: `Ages 26-55 are at ${formatPercent(age26to55.rate)} participation.`,
-      response: "Make 26-55, especially 36-45, the core re-engagement metric.",
+      question: "Are singles more connected and participating more?",
+      evidence:
+        "comm_stake_act; comm_stake_12_ago; comm_stake_12_partic; comm_stake_6mon; comm_groups_form",
+      signal: `${formatPercent(latestSummary.rate)} adult participation; ${formatDeltaPct(
+        rateDelta
+      )} versus ${baselinePeriod}.`,
+      status: "Partially populated from SQL; tracker responses add social connection and activity frequency.",
     },
     {
-      priority: "Male reinforcement",
-      signal: `Ages 46+ show ${formatGenderGap(age46Plus.genderGap)}.`,
-      response: "Design midlife and older outreach with a specific male retention lens.",
+      question: "Are single adults more spiritually engaged and optimistic?",
+      evidence: "spiritual_engaged; spiritual_more_invol; spiritual_morale",
+      signal: "Not measured in the SQL participation extract.",
+      status: "Needs stake rep tracker responses before the dashboard can prove movement.",
     },
     {
-      priority: "Metro and distance friction",
-      signal: `${formatNumber(constrainedSummary.units)} units sit in high-isolation / low-participation conditions.`,
-      response: "Use smaller local clusters, rotated locations, and lower-friction touchpoints.",
+      question: "Are relationships and marriages forming through singles efforts?",
+      evidence: "relations_dates; relations_marriage; relations_hopeful",
+      signal: "Not measured in the SQL participation extract.",
+      status: "Needs tracker response data for 6-month dating, marriage, and hopefulness indicators.",
     },
     {
-      priority: "Replicate strengths",
-      signal: `${formatNumber(
-        latest.filter((row) => row.isolationVsPerformance === "Low isolation / High participation").length
-      )} units combine low isolation with high participation.`,
-      response: "Document what works and pair stronger units with nearby units that need help.",
+      question: "Has the council improved cross-stake coordination and created new opportunities?",
+      evidence: "council_improved; council_opps; council_opps_yes; council_overall",
+      signal: `${formatNumber(councilLatest.length)} councils and ${formatNumber(
+        latestSummary.stakes
+      )} stakes represented in the adult participation view.`,
+      status: "Council value proof depends on tracker responses for coordination, opportunity creation, and overall value.",
+    },
+    {
+      question: "What support should leadership prioritize next?",
+      evidence: "feedback_challenge; feedback_support",
+      signal: `${leadingCouncil?.name} leads at ${formatPercent(
+        leadingCouncil?.rate
+      )}; ${trailingCouncil?.name} trails at ${formatPercent(trailingCouncil?.rate)}.`,
+      status: "Use open feedback with the stake/unit action tab to turn findings into council work.",
     },
   ]);
 
-  renderExecutiveSegmentRows([
-    {
-      ...segmentSummary(
-        "18-25",
-        ageRows.filter((row) => row.ageGroup === "18-25")
-      ),
-      meaning: "Young adult handoff and early retention.",
-    },
-    {
-      ...segmentSummary(
-        "26-35",
-        ageRows.filter((row) => row.ageGroup === "26-35")
-      ),
-      meaning: "Transition drop-off begins.",
-    },
-    {
-      ...segmentSummary(
-        "36-45",
-        ageRows.filter((row) => row.ageGroup === "36-45")
-      ),
-      meaning: "Deepest midlife trough.",
-    },
-    {
-      ...age46Plus,
-      meaning: "Male re-engagement becomes more important.",
-    },
-    {
-      ...segmentSummary(
-        "66+",
-        ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 66)
-      ),
-      meaning: "Late-life participation recovery.",
-    },
-  ]);
+  renderExecutiveSegmentRows(
+    segments.map((segment) => ({
+      ...segment,
+      meaning: segment.meaning,
+    }))
+  );
 
   $("#executiveCouncilSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
   renderHorizontalBars(
@@ -797,81 +826,75 @@ function renderAgeGenderRows(ageData) {
 
 function renderDemographics() {
   const ageRows = latestAgeSourceRows();
-  const ageData = ageGenderData(ageRows);
-  const adultAgeData = ageData.filter((item) => item.rank >= 18);
-  const lowestAdult = adultAgeData.reduce(
+  const segmentData = ageSegmentData(ageRows);
+  const lowestAdult = segmentData.reduce(
     (lowest, item) => (!lowest || item.rate < lowest.rate ? item : lowest),
     null
   );
-  const age26to55 = segmentSummary(
-    "Ages 26-55",
-    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 26 && ageGroupRank(row.ageGroup) <= 46)
-  );
-  const age46Plus = segmentSummary(
-    "Ages 46+",
-    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 46)
-  );
-  const maxAgeRate = Math.max(...ageData.map((item) => item.rate), 0.01);
-  const maxGap = Math.max(...ageData.map((item) => Math.abs(item.genderGap || 0)), 0.01);
+  const ysa = segmentData.find((segment) => segment.segmentId === "ysa");
+  const singleAdults = segmentData.find((segment) => segment.segmentId === "singleAdults");
+  const olderSingles = segmentData.find((segment) => segment.segmentId === "singles46plus");
+  const maxAgeRate = Math.max(...segmentData.map((item) => item.rate), 0.01);
+  const maxGap = Math.max(...segmentData.map((item) => Math.abs(item.genderGap || 0)), 0.01);
 
   $("#demographicKpis").innerHTML = [
     kpiCard(
-      "Lowest Adult Band",
+      "Lowest Segment",
       formatPercent(lowestAdult?.rate),
-      `${lowestAdult?.ageGroup || "--"}; ${formatNumber(lowestAdult?.members)} members`,
+      `${lowestAdult?.label || "--"}; ${formatNumber(lowestAdult?.members)} members`,
       null
     ),
     kpiCard(
-      "26-55 Participation",
-      formatPercent(age26to55.rate),
-      `${formatNumber(age26to55.participating)} of ${formatNumber(age26to55.members)} participating`,
+      "YSA 18-35",
+      formatPercent(ysa?.rate),
+      `${formatNumber(ysa?.participating)} of ${formatNumber(ysa?.members)} participating`,
+      null
+    ),
+    kpiCard(
+      "SA 36-45",
+      formatPercent(singleAdults?.rate),
+      `${formatNumber(singleAdults?.participating)} of ${formatNumber(singleAdults?.members)} participating`,
       null
     ),
     kpiCard(
       "46+ Male Rate",
-      formatPercent(age46Plus.maleRate),
-      `${formatGenderGap(age46Plus.genderGap)} versus female rate`,
-      null
-    ),
-    kpiCard(
-      "Age Groups",
-      formatNumber(ageData.length),
-      `${latestPeriod}; source age bands`,
+      formatPercent(olderSingles?.maleRate),
+      `${formatGenderGap(olderSingles?.genderGap)} versus female rate`,
       null
     ),
   ].join("");
 
-  $("#ageCurveSubtitle").textContent = `${latestPeriod}; all available source age groups`;
+  $("#ageCurveSubtitle").textContent = `${latestPeriod}; under-18 rows excluded`;
   renderHorizontalBars(
     $("#ageCurveChart"),
-    ageData.map((item) => ({
-      name: item.ageGroup,
+    segmentData.map((item) => ({
+      name: item.name,
       value: item.rate,
-      color: item.rank >= 26 && item.rank <= 46 ? "#c9962c" : "#168a8f",
+      color: item.segmentId === "singleAdults" ? "#c9962c" : "#168a8f",
     })),
     {
-      label: "Age participation curve",
+      label: "Age segment participation",
       formatter: formatPercent,
       maxValue: maxAgeRate,
       width: 760,
-      labelWidth: 90,
-      maxLabelLength: 12,
+      labelWidth: 170,
+      maxLabelLength: 24,
     }
   );
   renderHorizontalBars(
     $("#genderGapChart"),
-    ageData.map((item) => ({ name: item.ageGroup, value: item.genderGap })),
+    segmentData.map((item) => ({ name: item.name, value: item.genderGap })),
     {
-      label: "Gender gap by age",
+      label: "Gender gap by age segment",
       formatter: formatGenderGap,
       absolute: true,
       maxValue: maxGap,
       width: 520,
-      labelWidth: 90,
-      maxLabelLength: 12,
+      labelWidth: 134,
+      maxLabelLength: 18,
     }
   );
-  renderAgeGenderRows(ageData);
+  renderAgeGenderRows(segmentData);
 }
 
 function renderArchetypeRows(archetypes) {
@@ -1220,22 +1243,22 @@ function renderRepBrief(latest, prior) {
 
 function renderFilteredAgePattern() {
   const filteredAgeRows = filteredLatestSourceRows();
-  const ageData = ageGenderData(filteredAgeRows);
+  const ageData = ageSegmentData(filteredAgeRows);
   $("#filteredAgeSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
   renderHorizontalBars(
     $("#filteredAgeChart"),
     ageData.map((item) => ({
-      name: item.ageGroup,
+      name: item.name,
       value: item.rate,
-      color: item.rank >= 26 && item.rank <= 46 ? "#c9962c" : "#168a8f",
+      color: item.segmentId === "singleAdults" ? "#c9962c" : "#168a8f",
     })),
     {
-      label: "Filtered age participation pattern",
+      label: "Filtered age segment participation pattern",
       formatter: formatPercent,
       maxValue: Math.max(...ageData.map((item) => item.rate), 0.01),
       width: 520,
-      labelWidth: 90,
-      maxLabelLength: 12,
+      labelWidth: 134,
+      maxLabelLength: 18,
     }
   );
 }
@@ -1316,7 +1339,7 @@ function renderSource() {
   const scope = ageScopeInfo();
   $("#ageScopeNote").textContent = scope.description;
   $("#freshness").textContent = `${meta.sourceSystem}: ${meta.sourceServer}.${meta.sourceDatabase}.${meta.sourceSchema}. ${formatNumber(meta.rowCount)} source rows across ${baselinePeriod} and ${latestPeriod}.`;
-  $("#sourceNote").textContent = `${meta.methodology} ${meta.caveat} Story tabs mirror the April 2026 executive summary and Q1 presentation themes; displayed metrics are recomputed from the local SQL extract.`;
+  $("#sourceNote").textContent = `${meta.methodology} ${meta.caveat} The Executive Story tab maps the Stake Rep Tracker questions to the council-value proof model; displayed participation metrics are recomputed from the local SQL extract.`;
 }
 
 function render() {

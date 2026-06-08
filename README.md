@@ -48,11 +48,15 @@ Anything in `data/council-data.js` is visible to anyone with the URL. The curren
 
 - Executive Story: senior-leadership readout of corridor health, priority segments, and operating focus.
 - Council Overview: council scale, participation rate, and current versus prior snapshot comparison.
-- Age & Gender: Q1 2026 age curve, gender gap by age, and segment-level participation table.
+- Age & Gender: Q1 2026 adult age segments, gender gap by segment, and segment-level participation table.
 - Geography: distance tiers, structural archetypes, and highest-priority units.
 - Time Over Time: 2025 Q3 to 2026 Q1 movement by council, stake, and matched unit.
 - Stake & Unit Action: filters for council reps and stake representatives to inspect their local situation.
 
+## Executive Brief Proof Model
+
+The Executive Story tab is mapped to `Mid-Atlantic_Singles_Council_-_Stake_Rep_Tracker.docx`. That tracker defines the council-value evidence model across community and participation, spiritual engagement, relationships and marriage, council coordination and impact, and open feedback. The SQL extract populates the participation and movement signals; tracker response data is still needed to populate the spiritual, relationship, coordination, and qualitative proof points.
+
 ## Source Caveat
 
-The available SQL sources are 2025 Q3 and 2026 Q1. The 2025 Q3 rows are unit-level and do not include age or gender fields. The 2026 Q1 rows are age-group level and include age group, sex counts, participating male/female counts, unit zip code, distance tiers, and structural priority fields. Time-over-time views therefore compare the best available snapshots, not a same-quarter year-over-year series.
+The available SQL sources are 2025 Q3 and 2026 Q1. The dashboard excludes 2026 rows for ages 0-17. The 2025 Q3 rows are unit-level and do not include age or gender fields. The 2026 Q1 rows are age-group level and include age group, sex counts, participating male/female counts, unit zip code, distance tiers, and structural priority fields. Time-over-time views therefore compare the best available snapshots, not a same-quarter year-over-year series. Age-segment filters apply to the current 2026 snapshot; the prior 2025 Q3 source remains unit-level.
