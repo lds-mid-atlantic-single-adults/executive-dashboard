@@ -1,6 +1,6 @@
 # Mid-Atlantic Singles Council Dashboard
 
-Static, public-shareable dashboard built from the local Tableau Hyper extract:
+Static, public-shareable dashboard built from local Mid-Atlantic Singles Council participation extracts:
 
 `USNE - SA participation - 03 Nov 2025.hyper`
 
@@ -44,6 +44,15 @@ Because the dashboard is static, the simplest options are:
 
 Anything in `data/council-data.js` is visible to anyone with the URL. The current file contains aggregate unit-level counts, not individual records.
 
+## Dashboard Tabs
+
+- Executive Story: senior-leadership readout of corridor health, priority segments, and operating focus.
+- Council Overview: council scale, participation rate, and current versus prior snapshot comparison.
+- Age & Gender: Q1 2026 age curve, gender gap by age, and segment-level participation table.
+- Geography: distance tiers, structural archetypes, and highest-priority units.
+- Time Over Time: 2025 Q3 to 2026 Q1 movement by council, stake, and matched unit.
+- Stake & Unit Action: filters for council reps and stake representatives to inspect their local situation.
+
 ## Source Caveat
 
-The current extract is not the exact SOP schema. It includes council, stake/district, state, city, unit name, member count, participating count, percent, and date. It does not include exact age, sex, unit zip code, participating males, or participating females.
+The available SQL sources are 2025 Q3 and 2026 Q1. The 2025 Q3 rows are unit-level and do not include age or gender fields. The 2026 Q1 rows are age-group level and include age group, sex counts, participating male/female counts, unit zip code, distance tiers, and structural priority fields. Time-over-time views therefore compare the best available snapshots, not a same-quarter year-over-year series.

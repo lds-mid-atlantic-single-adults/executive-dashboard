@@ -13,12 +13,19 @@ const sourceRows = payload.rows.map((row) => ({
 const baselinePeriod = meta.baselinePeriod;
 const latestPeriod = meta.latestPeriod;
 const state = {
-  activeTab: "overview",
+  activeTab: "executive",
   ageScope: meta.defaultAgeScope || "26plus",
   council: "All councils",
   stake: "All stakes / districts",
   query: "",
   sort: "membersDesc",
+};
+
+const ARCHETYPE_STRATEGIES = {
+  "Low isolation / High participation": "Scale and replicate",
+  "Low isolation / Low participation": "Fix execution",
+  "High isolation / Low participation": "Reduce friction",
+  "High isolation / High participation": "Protect and learn",
 };
 
 const fmt = new Intl.NumberFormat("en-US");
@@ -62,6 +69,13 @@ function formatDeltaPct(value) {
   return `${pp > 0 ? "+" : ""}${pp.toFixed(1)} pp`;
 }
 
+function formatGenderGap(value) {
+  if (!Number.isFinite(value)) return "--";
+  const pp = Math.abs(value * 100).toFixed(1);
+  if (Math.abs(value) < 0.0001) return "Even";
+  return value > 0 ? `F +${pp} pp` : `M +${pp} pp`;
+}
+
 function valueClass(value) {
   if (!Number.isFinite(value) || Math.abs(value) < 0.0001) return "";
   return value > 0 ? " positive" : " negative";
@@ -69,6 +83,28 @@ function valueClass(value) {
 
 function rateClass(rate) {
   return Number.isFinite(rate) && rate < 0.12 ? " low" : "";
+}
+
+function formatScore(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : "--";
+}
+
+function cleanDistanceTier(value) {
+  return String(value || "Unassigned")
+    .replace(/\u00ef\u00bf\u00bd/g, "-")
+    .replace(/\uFFFD/g, "-")
+    .replace(/\u2013/g, "-")
+    .replace("?75 mi", ">=75 mi")
+    .replace("=75 mi", ">=75 mi");
+}
+
+function distanceTierRank(value) {
+  const tier = cleanDistanceTier(value);
+  if (tier.startsWith("<20")) return 1;
+  if (tier.startsWith("20-40")) return 2;
+  if (tier.startsWith("40-75")) return 3;
+  if (tier.startsWith(">=75")) return 4;
+  return 99;
 }
 
 function hasCounts(row) {
@@ -186,6 +222,33 @@ function summarize(items) {
   };
 }
 
+function summarizeSourceRows(items) {
+  const summary = summarize(items);
+  const males = sumField(items, "males") || 0;
+  const females = sumField(items, "females") || 0;
+  const participatingMales = sumField(items, "participatingMales") || 0;
+  const participatingFemales = sumField(items, "participatingFemales") || 0;
+  return {
+    ...summary,
+    males,
+    females,
+    participatingMales,
+    participatingFemales,
+    maleRate: males > 0 ? participatingMales / males : null,
+    femaleRate: females > 0 ? participatingFemales / females : null,
+    genderGap:
+      males > 0 && females > 0
+        ? participatingFemales / females - participatingMales / males
+        : null,
+  };
+}
+
+function averageField(items, field) {
+  const values = items.map((item) => item[field]).filter(Number.isFinite);
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 function aggregate(items, key) {
   return [...groupBy(items, key)].map(([name, groupRows]) => ({
     name,
@@ -193,6 +256,29 @@ function aggregate(items, key) {
     rows: groupRows,
     ...summarize(groupRows),
   }));
+}
+
+function latestAgeSourceRows() {
+  return sourceRows.filter((row) => row.period === latestPeriod && row.sourceGrain === "age_group");
+}
+
+function ageGenderData(items = latestAgeSourceRows()) {
+  return [...groupBy(items, "ageGroup")]
+    .map(([ageGroup, groupRows]) => ({
+      name: ageGroup,
+      ageGroup,
+      rank: ageGroupRank(ageGroup),
+      rows: groupRows,
+      ...summarizeSourceRows(groupRows),
+    }))
+    .sort((a, b) => a.rank - b.rank);
+}
+
+function segmentSummary(label, items) {
+  return {
+    label,
+    ...summarizeSourceRows(items),
+  };
 }
 
 function comparisonByKey(latestItems, baselineItems, keyFn) {
@@ -208,6 +294,31 @@ function comparisonByKey(latestItems, baselineItems, keyFn) {
       name: latest?.name || baseline?.name || key,
       latest,
       baseline,
+      deltaMembers: (latest?.members ?? 0) - (baseline?.members ?? 0),
+      deltaParticipating: (latest?.participating ?? 0) - (baseline?.participating ?? 0),
+      deltaRate:
+        Number.isFinite(latest?.rate) && Number.isFinite(baseline?.rate)
+          ? latest.rate - baseline.rate
+          : null,
+    };
+  });
+}
+
+function comparisonByUnit(latestItems, baselineItems) {
+  const latestMap = new Map(latestItems.map((item) => [item.unitJoinKey, item]));
+  const baselineMap = new Map(baselineItems.map((item) => [item.unitJoinKey, item]));
+  const keys = [...new Set([...latestMap.keys(), ...baselineMap.keys()])];
+
+  return keys.map((key) => {
+    const latest = latestMap.get(key);
+    const baseline = baselineMap.get(key);
+    return {
+      key,
+      latest,
+      baseline,
+      name: latest?.unitName || baseline?.unitName || key,
+      stakeOrDistrict: latest?.stakeOrDistrict || baseline?.stakeOrDistrict || "--",
+      coordinatingCouncil: latest?.coordinatingCouncil || baseline?.coordinatingCouncil || "--",
       deltaMembers: (latest?.members ?? 0) - (baseline?.members ?? 0),
       deltaParticipating: (latest?.participating ?? 0) - (baseline?.participating ?? 0),
       deltaRate:
@@ -458,6 +569,510 @@ function renderCouncilDeltaRows(comparisons) {
     .join("");
 }
 
+function storyCard(title, body, context) {
+  return `
+    <article class="story-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(body)}</p>
+      ${context ? `<span>${escapeHtml(context)}</span>` : ""}
+    </article>
+  `;
+}
+
+function renderExecutivePriorityRows(rows) {
+  $("#executivePriorityRows").innerHTML = rows
+    .map(
+      (row) => `
+      <tr>
+        <td class="text">${escapeHtml(row.priority)}</td>
+        <td class="text">${escapeHtml(row.signal)}</td>
+        <td class="text">${escapeHtml(row.response)}</td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function renderExecutiveSegmentRows(segments) {
+  $("#executiveSegmentRows").innerHTML = segments
+    .map(
+      (segment) => `
+      <tr>
+        <td class="text">${escapeHtml(segment.label)}</td>
+        <td>${formatNumber(segment.members)}</td>
+        <td><span class="rate-pill${rateClass(segment.rate)}">${formatPercent(segment.rate)}</span></td>
+        <td class="text">${escapeHtml(segment.meaning)}</td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function renderExecutive() {
+  const latest = currentRows();
+  const prior = priorRows();
+  const latestSummary = summarize(latest);
+  const priorSummary = summarize(prior);
+  const ageRows = latestAgeSourceRows();
+  const ageData = ageGenderData(ageRows);
+  const age36to45 = ageData.find((item) => item.ageGroup === "36-45");
+  const age26to55 = segmentSummary(
+    "Ages 26-55",
+    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 26 && ageGroupRank(row.ageGroup) <= 46)
+  );
+  const age18to45 = segmentSummary(
+    "Ages 18-45",
+    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 18 && ageGroupRank(row.ageGroup) <= 36)
+  );
+  const age46Plus = segmentSummary(
+    "Ages 46+",
+    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 46)
+  );
+  const constrained = latest.filter(
+    (row) => row.isolationVsPerformance === "High isolation / Low participation"
+  );
+  const constrainedSummary = summarize(constrained);
+  const councilLatest = aggregate(latest, "coordinatingCouncil").sort((a, b) => b.rate - a.rate);
+  const leadingCouncil = councilLatest[0];
+  const trailingCouncil = councilLatest[councilLatest.length - 1];
+  const rateDelta =
+    Number.isFinite(latestSummary.rate) && Number.isFinite(priorSummary.rate)
+      ? latestSummary.rate - priorSummary.rate
+      : null;
+
+  $("#executiveKpis").innerHTML = [
+    kpiCard(
+      "Corridor Rate",
+      formatPercent(latestSummary.rate),
+      `${formatNumber(latestSummary.participating)} of ${formatNumber(latestSummary.members)} participating`,
+      {
+        value: rateDelta,
+        label: `${formatDeltaPct(rateDelta)} vs ${baselinePeriod}`,
+      }
+    ),
+    kpiCard(
+      "Midlife Trough",
+      formatPercent(age36to45?.rate),
+      `Ages 36-45; ${formatNumber(age36to45?.members)} members`,
+      null
+    ),
+    kpiCard(
+      "46+ Gender Gap",
+      formatGenderGap(age46Plus.genderGap),
+      "Female minus male participation rate",
+      {
+        value: age46Plus.genderGap,
+        label: `${formatPercent(age46Plus.femaleRate)} female; ${formatPercent(age46Plus.maleRate)} male`,
+      }
+    ),
+    kpiCard(
+      "Constrained Units",
+      formatNumber(constrainedSummary.units),
+      `${formatPercent(constrainedSummary.rate)} participation; ${formatNumber(constrainedSummary.members)} members`,
+      null
+    ),
+  ].join("");
+
+  $("#executiveNarrative").innerHTML = [
+    storyCard(
+      "State Of Singles",
+      `${formatNumber(latestSummary.units)} units across ${formatNumber(
+        latestSummary.stakes
+      )} stakes or districts are represented in the current ${ageScopeInfo().label}.`,
+      `${latestPeriod} source snapshot`
+    ),
+    storyCard(
+      "What Senior Leaders Should See",
+      `${leadingCouncil?.name} leads at ${formatPercent(
+        leadingCouncil?.rate
+      )}; ${trailingCouncil?.name} trails at ${formatPercent(
+        trailingCouncil?.rate
+      )}. The ${age36to45?.ageGroup || "36-45"} band is the clearest participation trough.`,
+      "Uneven outcomes, structured constraints"
+    ),
+    storyCard(
+      "Where Action Should Focus",
+      `Treat ${formatPercent(age18to45.rate)} participation among ages 18-45, ${formatGenderGap(
+        age46Plus.genderGap
+      )} among ages 46+, and ${formatNumber(
+        constrainedSummary.units
+      )} high-isolation / low-participation units as the shared operating problem.`,
+      "Age, gender, and geography together"
+    ),
+  ].join("");
+
+  renderExecutivePriorityRows([
+    {
+      priority: "Midlife re-engagement",
+      signal: `Ages 26-55 are at ${formatPercent(age26to55.rate)} participation.`,
+      response: "Make 26-55, especially 36-45, the core re-engagement metric.",
+    },
+    {
+      priority: "Male reinforcement",
+      signal: `Ages 46+ show ${formatGenderGap(age46Plus.genderGap)}.`,
+      response: "Design midlife and older outreach with a specific male retention lens.",
+    },
+    {
+      priority: "Metro and distance friction",
+      signal: `${formatNumber(constrainedSummary.units)} units sit in high-isolation / low-participation conditions.`,
+      response: "Use smaller local clusters, rotated locations, and lower-friction touchpoints.",
+    },
+    {
+      priority: "Replicate strengths",
+      signal: `${formatNumber(
+        latest.filter((row) => row.isolationVsPerformance === "Low isolation / High participation").length
+      )} units combine low isolation with high participation.`,
+      response: "Document what works and pair stronger units with nearby units that need help.",
+    },
+  ]);
+
+  renderExecutiveSegmentRows([
+    {
+      ...segmentSummary(
+        "18-25",
+        ageRows.filter((row) => row.ageGroup === "18-25")
+      ),
+      meaning: "Young adult handoff and early retention.",
+    },
+    {
+      ...segmentSummary(
+        "26-35",
+        ageRows.filter((row) => row.ageGroup === "26-35")
+      ),
+      meaning: "Transition drop-off begins.",
+    },
+    {
+      ...segmentSummary(
+        "36-45",
+        ageRows.filter((row) => row.ageGroup === "36-45")
+      ),
+      meaning: "Deepest midlife trough.",
+    },
+    {
+      ...age46Plus,
+      meaning: "Male re-engagement becomes more important.",
+    },
+    {
+      ...segmentSummary(
+        "66+",
+        ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 66)
+      ),
+      meaning: "Late-life participation recovery.",
+    },
+  ]);
+
+  $("#executiveCouncilSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
+  renderHorizontalBars(
+    $("#executiveCouncilChart"),
+    councilLatest.map((item) => ({ name: item.name, value: item.rate })),
+    {
+      label: "Council standing by participation rate",
+      formatter: formatPercent,
+      maxValue: Math.max(...councilLatest.map((item) => item.rate), 0.01),
+      width: 520,
+      labelWidth: 198,
+      maxLabelLength: 23,
+      color: "#c9962c",
+    }
+  );
+}
+
+function renderAgeGenderRows(ageData) {
+  $("#ageGenderRows").innerHTML = ageData
+    .map(
+      (item) => `
+      <tr>
+        <td class="text">${escapeHtml(item.ageGroup)}</td>
+        <td>${formatNumber(item.members)}</td>
+        <td>${formatNumber(item.participating)}</td>
+        <td><span class="rate-pill${rateClass(item.rate)}">${formatPercent(item.rate)}</span></td>
+        <td>${formatPercent(item.maleRate)}</td>
+        <td>${formatPercent(item.femaleRate)}</td>
+        <td><span class="rate-pill${valueClass(item.genderGap)}">${formatGenderGap(item.genderGap)}</span></td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function renderDemographics() {
+  const ageRows = latestAgeSourceRows();
+  const ageData = ageGenderData(ageRows);
+  const adultAgeData = ageData.filter((item) => item.rank >= 18);
+  const lowestAdult = adultAgeData.reduce(
+    (lowest, item) => (!lowest || item.rate < lowest.rate ? item : lowest),
+    null
+  );
+  const age26to55 = segmentSummary(
+    "Ages 26-55",
+    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 26 && ageGroupRank(row.ageGroup) <= 46)
+  );
+  const age46Plus = segmentSummary(
+    "Ages 46+",
+    ageRows.filter((row) => ageGroupRank(row.ageGroup) >= 46)
+  );
+  const maxAgeRate = Math.max(...ageData.map((item) => item.rate), 0.01);
+  const maxGap = Math.max(...ageData.map((item) => Math.abs(item.genderGap || 0)), 0.01);
+
+  $("#demographicKpis").innerHTML = [
+    kpiCard(
+      "Lowest Adult Band",
+      formatPercent(lowestAdult?.rate),
+      `${lowestAdult?.ageGroup || "--"}; ${formatNumber(lowestAdult?.members)} members`,
+      null
+    ),
+    kpiCard(
+      "26-55 Participation",
+      formatPercent(age26to55.rate),
+      `${formatNumber(age26to55.participating)} of ${formatNumber(age26to55.members)} participating`,
+      null
+    ),
+    kpiCard(
+      "46+ Male Rate",
+      formatPercent(age46Plus.maleRate),
+      `${formatGenderGap(age46Plus.genderGap)} versus female rate`,
+      null
+    ),
+    kpiCard(
+      "Age Groups",
+      formatNumber(ageData.length),
+      `${latestPeriod}; source age bands`,
+      null
+    ),
+  ].join("");
+
+  $("#ageCurveSubtitle").textContent = `${latestPeriod}; all available source age groups`;
+  renderHorizontalBars(
+    $("#ageCurveChart"),
+    ageData.map((item) => ({
+      name: item.ageGroup,
+      value: item.rate,
+      color: item.rank >= 26 && item.rank <= 46 ? "#c9962c" : "#168a8f",
+    })),
+    {
+      label: "Age participation curve",
+      formatter: formatPercent,
+      maxValue: maxAgeRate,
+      width: 760,
+      labelWidth: 90,
+      maxLabelLength: 12,
+    }
+  );
+  renderHorizontalBars(
+    $("#genderGapChart"),
+    ageData.map((item) => ({ name: item.ageGroup, value: item.genderGap })),
+    {
+      label: "Gender gap by age",
+      formatter: formatGenderGap,
+      absolute: true,
+      maxValue: maxGap,
+      width: 520,
+      labelWidth: 90,
+      maxLabelLength: 12,
+    }
+  );
+  renderAgeGenderRows(ageData);
+}
+
+function renderArchetypeRows(archetypes) {
+  $("#archetypeRows").innerHTML = archetypes
+    .map(
+      (item) => `
+      <tr>
+        <td class="text">${escapeHtml(item.name)}</td>
+        <td>${formatNumber(item.units)}</td>
+        <td><span class="rate-pill${rateClass(item.rate)}">${formatPercent(item.rate)}</span></td>
+        <td class="text">${escapeHtml(ARCHETYPE_STRATEGIES[item.name] || "Review locally")}</td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function renderPriorityUnitRows(rows) {
+  $("#priorityUnitRows").innerHTML = rows
+    .slice()
+    .sort((a, b) => (b.unitPriorityIndex || 0) - (a.unitPriorityIndex || 0))
+    .slice(0, 12)
+    .map(
+      (row) => `
+      <tr>
+        <td class="text">${escapeHtml(row.unitName)}</td>
+        <td class="text">${escapeHtml(row.stakeOrDistrict)}</td>
+        <td class="text">${escapeHtml(row.coordinatingCouncil)}</td>
+        <td>${formatNumber(row.members)}</td>
+        <td><span class="rate-pill${rateClass(row.rate)}">${formatPercent(row.rate)}</span></td>
+        <td>${formatScore(row.unitPriorityIndex)}</td>
+        <td class="text">${escapeHtml(row.isolationVsPerformance || "--")}</td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function renderGeography() {
+  const latest = currentRows();
+  const latestSummary = summarize(latest);
+  const avgDistance = averageField(latest, "milesToCouncilCentroid");
+  const farUnits = latest.filter((row) => distanceTierRank(row.councilDistanceTier) >= 3);
+  const farSummary = summarize(farUnits);
+  const executionGap = latest.filter(
+    (row) => row.isolationVsPerformance === "Low isolation / Low participation"
+  );
+  const resilient = latest.filter(
+    (row) => row.isolationVsPerformance === "High isolation / High participation"
+  );
+  const archetypes = aggregate(latest, (row) => row.isolationVsPerformance || "Unassigned").sort(
+    (a, b) => a.name.localeCompare(b.name)
+  );
+  const distanceData = aggregate(latest, (row) => cleanDistanceTier(row.councilDistanceTier)).sort(
+    (a, b) => distanceTierRank(a.name) - distanceTierRank(b.name)
+  );
+
+  $("#geographyKpis").innerHTML = [
+    kpiCard(
+      "Average Distance",
+      Number.isFinite(avgDistance) ? `${avgDistance.toFixed(0)} mi` : "--",
+      `Council centroid distance across ${formatNumber(latestSummary.units)} units`,
+      null
+    ),
+    kpiCard(
+      "40+ Mile Units",
+      formatNumber(farSummary.units),
+      `${formatPercent(farSummary.rate)} participation; ${formatNumber(farSummary.members)} members`,
+      null
+    ),
+    kpiCard(
+      "Execution Gaps",
+      formatNumber(executionGap.length),
+      "Low isolation / low participation units",
+      null
+    ),
+    kpiCard(
+      "Resilient Outliers",
+      formatNumber(resilient.length),
+      "High isolation / high participation units",
+      null
+    ),
+  ].join("");
+
+  $("#distanceTierSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
+  renderHorizontalBars(
+    $("#distanceTierChart"),
+    distanceData.map((item) => ({
+      name: item.name,
+      value: item.rate,
+      color: distanceTierRank(item.name) >= 3 ? "#c9962c" : "#168a8f",
+    })),
+    {
+      label: "Participation by distance tier",
+      formatter: formatPercent,
+      maxValue: Math.max(...distanceData.map((item) => item.rate), 0.01),
+      width: 760,
+      labelWidth: 110,
+      maxLabelLength: 18,
+    }
+  );
+  renderArchetypeRows(archetypes);
+  renderPriorityUnitRows(latest);
+}
+
+function renderUnitMovementRows(movements) {
+  $("#unitMovementRows").innerHTML = movements
+    .map(
+      (item) => `
+      <tr>
+        <td class="text">${escapeHtml(item.name)}</td>
+        <td class="text">${escapeHtml(item.stakeOrDistrict)}</td>
+        <td class="text">${escapeHtml(item.coordinatingCouncil)}</td>
+        <td>${formatPercent(item.baseline?.rate)}</td>
+        <td>${formatPercent(item.latest?.rate)}</td>
+        <td><span class="rate-pill${valueClass(item.deltaRate)}">${formatDeltaPct(item.deltaRate)}</span></td>
+        <td><span class="${valueClass(item.deltaMembers)}">${formatDeltaNumber(item.deltaMembers)}</span></td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
+function renderTime() {
+  const latest = currentRows();
+  const prior = priorRows();
+  const latestSummary = summarize(latest);
+  const priorSummary = summarize(prior);
+  const coverage = coverageSummary(latest, prior);
+  const rateDelta =
+    Number.isFinite(latestSummary.rate) && Number.isFinite(priorSummary.rate)
+      ? latestSummary.rate - priorSummary.rate
+      : null;
+  const councilComparisons = comparisonByKey(latest, prior, "coordinatingCouncil");
+  const stakeComparisons = comparisonByKey(latest, prior, "stakeOrDistrict")
+    .filter((item) => item.latest && item.baseline && Number.isFinite(item.deltaRate))
+    .sort((a, b) => Math.abs(b.deltaRate) - Math.abs(a.deltaRate))
+    .slice(0, 12);
+  const unitMovements = comparisonByUnit(latest, prior)
+    .filter((item) => item.latest && item.baseline && Number.isFinite(item.deltaRate))
+    .sort((a, b) => Math.abs(b.deltaRate) - Math.abs(a.deltaRate))
+    .slice(0, 20);
+
+  $("#timeKpis").innerHTML = [
+    kpiCard(
+      "Rate Change",
+      formatDeltaPct(rateDelta),
+      `${formatPercent(priorSummary.rate)} to ${formatPercent(latestSummary.rate)}`,
+      null
+    ),
+    kpiCard(
+      "Participating Change",
+      formatDeltaNumber(latestSummary.participating - priorSummary.participating),
+      `${baselinePeriod} to ${latestPeriod}`,
+      null
+    ),
+    kpiCard(
+      "Member Change",
+      formatDeltaNumber(latestSummary.members - priorSummary.members),
+      `${baselinePeriod} to ${latestPeriod}`,
+      null
+    ),
+    kpiCard(
+      "Comparable Units",
+      formatNumber(coverage.matched),
+      `${formatNumber(coverage.newUnits)} new; ${formatNumber(coverage.missingUnits)} prior-only`,
+      null
+    ),
+  ].join("");
+
+  $("#timeCouncilSubtitle").textContent = `${baselinePeriod} to ${latestPeriod}; ${ageScopeInfo().label}`;
+  renderHorizontalBars(
+    $("#timeCouncilDeltaChart"),
+    councilComparisons
+      .map((item) => ({ name: item.name, value: item.deltaRate }))
+      .sort((a, b) => (b.value ?? -999) - (a.value ?? -999)),
+    {
+      label: "Council rate movement",
+      formatter: formatDeltaPct,
+      absolute: true,
+      maxValue: Math.max(...councilComparisons.map((item) => Math.abs(item.deltaRate || 0)), 0.01),
+      labelWidth: 210,
+      width: 760,
+    }
+  );
+  renderHorizontalBars(
+    $("#stakeMovementChart"),
+    stakeComparisons.map((item) => ({ name: item.name, value: item.deltaRate })),
+    {
+      label: "Stake rate movement leaders",
+      formatter: formatDeltaPct,
+      absolute: true,
+      maxValue: Math.max(...stakeComparisons.map((item) => Math.abs(item.deltaRate || 0)), 0.01),
+      width: 520,
+      labelWidth: 218,
+      maxLabelLength: 25,
+    }
+  );
+  renderUnitMovementRows(unitMovements);
+}
+
 function filteredLatestRows() {
   const latest = currentRows();
   const query = state.query.trim().toLowerCase();
@@ -472,6 +1087,22 @@ function filteredLatestRows() {
         .filter(Boolean)
         .some((value) => value.toLowerCase().includes(query));
     return councilMatches && stakeMatches && queryMatches;
+  });
+}
+
+function filteredLatestSourceRows() {
+  const query = state.query.trim().toLowerCase();
+  return latestAgeSourceRows().filter((row) => {
+    const councilMatches =
+      state.council === "All councils" || row.coordinatingCouncil === state.council;
+    const stakeMatches =
+      state.stake === "All stakes / districts" || row.stakeOrDistrict === state.stake;
+    const queryMatches =
+      !query ||
+      [row.unitName, row.city, row.stakeOrDistrict, row.coordinatingCouncil]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(query));
+    return councilMatches && stakeMatches && queryMatches && rowIncludedByAge(row);
   });
 }
 
@@ -545,6 +1176,70 @@ function renderUnitDetail(items) {
     .join("");
 }
 
+function renderRepBrief(latest, prior) {
+  const latestSummary = summarize(latest);
+  const priorSummary = summarize(prior);
+  const lowRateUnits = latest.filter((row) => Number.isFinite(row.rate) && row.rate < 0.12);
+  const constrainedUnits = latest.filter(
+    (row) => row.isolationVsPerformance === "High isolation / Low participation"
+  );
+  const stakes = aggregate(latest, "stakeOrDistrict").sort((a, b) => b.rate - a.rate);
+  const strongestStake = stakes[0];
+  const watchStake = stakes[stakes.length - 1];
+  const rateDelta =
+    Number.isFinite(latestSummary.rate) && Number.isFinite(priorSummary.rate)
+      ? latestSummary.rate - priorSummary.rate
+      : null;
+
+  $("#repBrief").innerHTML = [
+    storyCard(
+      "Selected Situation",
+      `${formatNumber(latestSummary.members)} members, ${formatNumber(
+        latestSummary.participating
+      )} participating, ${formatPercent(latestSummary.rate)} current rate.`,
+      `${formatDeltaPct(rateDelta)} versus matched prior units`
+    ),
+    storyCard(
+      "Where To Look First",
+      `${formatNumber(lowRateUnits.length)} units are below 12% participation; ${formatNumber(
+        constrainedUnits.length
+      )} are high-isolation / low-participation.`,
+      "Local action queue"
+    ),
+    storyCard(
+      "Internal Benchmark",
+      strongestStake
+        ? `${strongestStake.name} leads the selected view at ${formatPercent(
+            strongestStake.rate
+          )}; ${watchStake?.name} is lowest at ${formatPercent(watchStake?.rate)}.`
+        : "No stake benchmark is available for this filter.",
+      "Compare nearby operating patterns"
+    ),
+  ].join("");
+}
+
+function renderFilteredAgePattern() {
+  const filteredAgeRows = filteredLatestSourceRows();
+  const ageData = ageGenderData(filteredAgeRows);
+  $("#filteredAgeSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
+  renderHorizontalBars(
+    $("#filteredAgeChart"),
+    ageData.map((item) => ({
+      name: item.ageGroup,
+      value: item.rate,
+      color: item.rank >= 26 && item.rank <= 46 ? "#c9962c" : "#168a8f",
+    })),
+    {
+      label: "Filtered age participation pattern",
+      formatter: formatPercent,
+      maxValue: Math.max(...ageData.map((item) => item.rate), 0.01),
+      width: 520,
+      labelWidth: 90,
+      maxLabelLength: 12,
+    }
+  );
+}
+
 function renderOverview() {
   const latest = currentRows();
   const prior = priorRows();
@@ -595,6 +1290,7 @@ function renderDrilldown() {
     .sort((a, b) => (b.value ?? -999) - (a.value ?? -999));
 
   setKpis($("#drilldownKpis"), latestSummary, priorSummary, coverage);
+  renderRepBrief(latest, prior);
   $("#stakeChartSubtitle").textContent =
     state.council === "All councils" ? `${latestPeriod}; all councils` : `${latestPeriod}; ${state.council}`;
   renderHorizontalBars($("#stakeRateChart"), stakeLatest, {
@@ -612,6 +1308,7 @@ function renderDrilldown() {
     labelWidth: 218,
     maxLabelLength: 25,
   });
+  renderFilteredAgePattern();
   renderUnitDetail(latest);
 }
 
@@ -619,11 +1316,15 @@ function renderSource() {
   const scope = ageScopeInfo();
   $("#ageScopeNote").textContent = scope.description;
   $("#freshness").textContent = `${meta.sourceSystem}: ${meta.sourceServer}.${meta.sourceDatabase}.${meta.sourceSchema}. ${formatNumber(meta.rowCount)} source rows across ${baselinePeriod} and ${latestPeriod}.`;
-  $("#sourceNote").textContent = `${meta.methodology} ${meta.caveat}`;
+  $("#sourceNote").textContent = `${meta.methodology} ${meta.caveat} Story tabs mirror the April 2026 executive summary and Q1 presentation themes; displayed metrics are recomputed from the local SQL extract.`;
 }
 
 function render() {
+  renderExecutive();
   renderOverview();
+  renderDemographics();
+  renderGeography();
+  renderTime();
   renderDrilldown();
   renderSource();
 }

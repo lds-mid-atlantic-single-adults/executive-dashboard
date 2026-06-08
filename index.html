@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Mid-Atlantic Singles Council Dashboard</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
@@ -28,11 +29,23 @@
         </header>
 
         <nav class="tabs" aria-label="Dashboard tabs" role="tablist">
-          <button class="tab is-active" id="tab-overview" aria-selected="true" aria-controls="panel-overview" role="tab" type="button" data-tab="overview">
+          <button class="tab is-active" id="tab-executive" aria-selected="true" aria-controls="panel-executive" role="tab" type="button" data-tab="executive">
+            Executive Story
+          </button>
+          <button class="tab" id="tab-overview" aria-selected="false" aria-controls="panel-overview" role="tab" type="button" data-tab="overview">
             Council Overview
           </button>
+          <button class="tab" id="tab-demographics" aria-selected="false" aria-controls="panel-demographics" role="tab" type="button" data-tab="demographics">
+            Age &amp; Gender
+          </button>
+          <button class="tab" id="tab-geography" aria-selected="false" aria-controls="panel-geography" role="tab" type="button" data-tab="geography">
+            Geography
+          </button>
+          <button class="tab" id="tab-time" aria-selected="false" aria-controls="panel-time" role="tab" type="button" data-tab="time">
+            Time Over Time
+          </button>
           <button class="tab" id="tab-drilldown" aria-selected="false" aria-controls="panel-drilldown" role="tab" type="button" data-tab="drilldown">
-            Stake &amp; Ward Drilldown
+            Stake &amp; Unit Action
           </button>
         </nav>
 
@@ -44,7 +57,68 @@
           <div class="scope-note" id="ageScopeNote"></div>
         </section>
 
-        <section class="panel is-active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <section class="panel is-active" id="panel-executive" role="tabpanel" aria-labelledby="tab-executive">
+          <section class="kpi-grid" id="executiveKpis" aria-label="Executive story metrics"></section>
+
+          <section class="story-grid" id="executiveNarrative" aria-label="Executive narrative"></section>
+
+          <section class="dashboard-grid">
+            <article class="chart-panel full">
+              <div class="panel-heading">
+                <div>
+                  <h2>Leadership Decision Frame</h2>
+                  <p>Priority signals and operating response</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Priority</th>
+                      <th class="text">Signal</th>
+                      <th class="text">Operating Response</th>
+                    </tr>
+                  </thead>
+                  <tbody id="executivePriorityRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Council Standing</h2>
+                  <p id="executiveCouncilSubtitle"></p>
+                </div>
+              </div>
+              <div id="executiveCouncilChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Priority Segments</h2>
+                  <p>Latest period age and gender signals</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Segment</th>
+                      <th>Members</th>
+                      <th>Rate</th>
+                      <th class="text">Meaning</th>
+                    </tr>
+                  </thead>
+                  <tbody id="executiveSegmentRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
           <section class="kpi-grid" id="overviewKpis" aria-label="Council overview metrics"></section>
 
           <section class="dashboard-grid">
@@ -126,6 +200,171 @@
           </section>
         </section>
 
+        <section class="panel" id="panel-demographics" role="tabpanel" aria-labelledby="tab-demographics" hidden>
+          <section class="kpi-grid" id="demographicKpis" aria-label="Age and gender metrics"></section>
+
+          <section class="dashboard-grid">
+            <article class="chart-panel wide">
+              <div class="panel-heading">
+                <div>
+                  <h2>Age Participation Curve</h2>
+                  <p id="ageCurveSubtitle"></p>
+                </div>
+              </div>
+              <div id="ageCurveChart" class="chart-body"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Gender Gap By Age</h2>
+                  <p>Female minus male participation rate</p>
+                </div>
+              </div>
+              <div id="genderGapChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel full">
+              <div class="panel-heading">
+                <div>
+                  <h2>Age And Gender Summary</h2>
+                  <p>Latest period source rows</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Age Group</th>
+                      <th>Members</th>
+                      <th>Participating</th>
+                      <th>Rate</th>
+                      <th>Male Rate</th>
+                      <th>Female Rate</th>
+                      <th>Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ageGenderRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="panel" id="panel-geography" role="tabpanel" aria-labelledby="tab-geography" hidden>
+          <section class="kpi-grid" id="geographyKpis" aria-label="Geography and structural metrics"></section>
+
+          <section class="dashboard-grid">
+            <article class="chart-panel wide">
+              <div class="panel-heading">
+                <div>
+                  <h2>Participation By Distance Tier</h2>
+                  <p id="distanceTierSubtitle"></p>
+                </div>
+              </div>
+              <div id="distanceTierChart" class="chart-body"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Structural Archetypes</h2>
+                  <p>Latest period, selected age scope</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Archetype</th>
+                      <th>Units</th>
+                      <th>Rate</th>
+                      <th class="text">Strategy</th>
+                    </tr>
+                  </thead>
+                  <tbody id="archetypeRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="chart-panel full">
+              <div class="panel-heading">
+                <div>
+                  <h2>Highest Priority Units</h2>
+                  <p>Sorted by source priority index</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Unit</th>
+                      <th class="text">Stake / District</th>
+                      <th class="text">Council</th>
+                      <th>Members</th>
+                      <th>Rate</th>
+                      <th>Priority</th>
+                      <th class="text">Archetype</th>
+                    </tr>
+                  </thead>
+                  <tbody id="priorityUnitRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="panel" id="panel-time" role="tabpanel" aria-labelledby="tab-time" hidden>
+          <section class="kpi-grid" id="timeKpis" aria-label="Time over time metrics"></section>
+
+          <section class="dashboard-grid">
+            <article class="chart-panel wide">
+              <div class="panel-heading">
+                <div>
+                  <h2>Council Rate Movement</h2>
+                  <p id="timeCouncilSubtitle"></p>
+                </div>
+              </div>
+              <div id="timeCouncilDeltaChart" class="chart-body"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Stake Movement Leaders</h2>
+                  <p>Largest absolute rate changes</p>
+                </div>
+              </div>
+              <div id="stakeMovementChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel full">
+              <div class="panel-heading">
+                <div>
+                  <h2>Largest Unit Movements</h2>
+                  <p>Matched units only, current snapshot versus prior source snapshot</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Unit</th>
+                      <th class="text">Stake / District</th>
+                      <th class="text">Council</th>
+                      <th>Prior</th>
+                      <th>Current</th>
+                      <th>Delta</th>
+                      <th>Members</th>
+                    </tr>
+                  </thead>
+                  <tbody id="unitMovementRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
         <section class="panel" id="panel-drilldown" role="tabpanel" aria-labelledby="tab-drilldown" hidden>
           <section class="filters" aria-label="Stake and ward filters">
             <label>
@@ -143,6 +382,7 @@
           </section>
 
           <section class="kpi-grid" id="drilldownKpis" aria-label="Filtered drilldown metrics"></section>
+          <section class="story-grid compact-story" id="repBrief" aria-label="Filtered representative brief"></section>
 
           <section class="dashboard-grid">
             <article class="chart-panel wide">
@@ -153,6 +393,16 @@
                 </div>
               </div>
               <div id="stakeRateChart" class="chart-body"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Filtered Age Pattern</h2>
+                  <p id="filteredAgeSubtitle"></p>
+                </div>
+              </div>
+              <div id="filteredAgeChart" class="chart-body compact"></div>
             </article>
 
             <article class="chart-panel">

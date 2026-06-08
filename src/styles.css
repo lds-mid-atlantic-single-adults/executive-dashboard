@@ -154,8 +154,11 @@ input {
 }
 
 .tabs {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+  width: fit-content;
+  max-width: 100%;
   margin-bottom: 20px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -224,6 +227,61 @@ input {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.35;
+}
+
+.kpi-delta {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.positive {
+  color: var(--green);
+}
+
+.negative {
+  color: var(--red);
+}
+
+.story-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.story-card {
+  min-height: 132px;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.story-card h3 {
+  margin: 0 0 9px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.story-card p {
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.story-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.compact-story .story-card {
+  min-height: 118px;
 }
 
 .dashboard-grid {
@@ -372,6 +430,11 @@ th.text {
   text-align: left;
 }
 
+td.text,
+th.text {
+  white-space: normal;
+}
+
 th {
   color: var(--muted);
   font-size: 11px;
@@ -457,6 +520,10 @@ td .muted {
 
   .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .story-grid {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-grid {
