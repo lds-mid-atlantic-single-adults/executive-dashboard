@@ -46,12 +46,23 @@ Anything in `data/council-data.js` is visible to anyone with the URL. The curren
 
 ## Dashboard Tabs
 
-- Executive Story: senior-leadership readout of corridor health, priority segments, and operating focus.
-- Council Overview: council scale, participation rate, and current versus prior snapshot comparison.
-- Age & Gender: Q1 2026 adult age segments, gender gap by segment, and segment-level participation table.
-- Geography: distance tiers, structural archetypes, and highest-priority units.
-- Time Over Time: 2025 Q3 to 2026 Q1 movement by council, stake, and matched unit.
-- Stake & Unit Action: filters for council reps and stake representatives to inspect their local situation.
+- Executive Story: Area Seventy / senior-leadership proof of whether the council is valuable and moving outcomes.
+- Council Overview: council-rep operating portfolio for scale, participation gaps, and cross-council lift.
+- Age & Gender: age-bucket owner view of YSA, Single Adult, and Singles participation drop-offs.
+- Geography: logistics and calendar owner view of distance friction, archetypes, and priority units.
+- Time Over Time: accountability review of whether participation is improving by council, stake, and unit.
+- Stake & Unit Action: stake-rep view of local situation, benchmarks, and action queue.
+
+## Universal Variables
+
+The dashboard exposes a shared `ageSegment` variable through `window.MASC_DASHBOARD_VARIABLES` and the metadata `filterVariables.ageSegment` contract. The options are:
+
+- `allAdults`: All singles 18+
+- `ysa`: Young Single Adults (18-35)
+- `singleAdults`: Single Adults (36-45)
+- `singles46plus`: Singles (46+)
+
+Every page uses the same selected age segment for headline metrics, council/stake breakdowns, geography, time-over-time movement, and unit drilldowns.
 
 ## Executive Brief Proof Model
 

@@ -17,7 +17,7 @@ window.MASC_DASHBOARD_DATA = {
       }
     ],
     "exportedAt": "2026-06-07T23:55:33.3554503Z",
-    "builtAt": "2026-06-08T04:13:32.767125+00:00",
+    "builtAt": "2026-06-08T04:34:43.647190+00:00",
     "rowCount": 2508,
     "periods": [
       {
@@ -59,7 +59,37 @@ window.MASC_DASHBOARD_DATA = {
       }
     ],
     "methodology": "The dashboard is built from SQL Server BV.masc tables whose names include mid-atlantic-singles-council. 2025 Q3 rows are already unit-level. 2026 Q1 rows are age-group level; ages 0-17 are excluded before dashboard export. Adult rows are aggregated to unit, stake, and council inside the dashboard based on the selected age segment. Rates are recomputed from summed participating and member counts.",
-    "caveat": "The available SQL sources are 2025 Q3 and 2026 Q1, so the comparison is a snapshot-over-snapshot year assessment rather than same-quarter YoY. The 2026 source includes adult age groups; the dashboard excludes ages 0-17. The 2025 Q3 source has no age-group field, so age-segment filters apply to the current 2026 snapshot and not to the prior unit-level source."
+    "caveat": "The available SQL sources are 2025 Q3 and 2026 Q1, so the comparison is a snapshot-over-snapshot year assessment rather than same-quarter YoY. The 2026 source includes adult age groups; the dashboard excludes ages 0-17. The 2025 Q3 source has no age-group field, so age-segment filters apply to the current 2026 snapshot and not to the prior unit-level source.",
+    "filterVariables": {
+      "ageSegment": {
+        "id": "ageSegment",
+        "label": "Age Segment",
+        "defaultValue": "allAdults",
+        "allValue": "allAdults",
+        "options": [
+          {
+            "id": "allAdults",
+            "label": "All singles 18+",
+            "description": "Excludes 2026 rows for ages 0-17. 2025 Q3 has no age-group field, so prior comparison remains unit-level."
+          },
+          {
+            "id": "ysa",
+            "label": "Young Single Adults (18-35)",
+            "description": "Uses 2026 age groups 18-25 and 26-35. 2025 Q3 has no age-group field, so prior comparison remains unit-level."
+          },
+          {
+            "id": "singleAdults",
+            "label": "Single Adults (36-45)",
+            "description": "Uses the 2026 age group 36-45. 2025 Q3 has no age-group field, so prior comparison remains unit-level."
+          },
+          {
+            "id": "singles46plus",
+            "label": "Singles (46+)",
+            "description": "Uses 2026 age groups 46-55 and older. 2025 Q3 has no age-group field, so prior comparison remains unit-level."
+          }
+        ]
+      }
+    }
   },
   "rows": [
     {

@@ -180,6 +180,16 @@ def main() -> None:
         ),
     }
 
+    metadata["filterVariables"] = {
+        "ageSegment": {
+            "id": "ageSegment",
+            "label": "Age Segment",
+            "defaultValue": metadata["defaultAgeScope"],
+            "allValue": "allAdults",
+            "options": metadata["ageScopes"],
+        }
+    }
+
     dashboard_payload = {"metadata": metadata, "rows": rows}
 
     DATA_DIR.mkdir(exist_ok=True)

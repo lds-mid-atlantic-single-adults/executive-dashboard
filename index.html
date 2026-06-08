@@ -52,9 +52,9 @@
         <section class="filters scope-controls" aria-label="Comparison controls">
           <label>
             <span>Age Segment</span>
-            <select id="ageScopeFilter"></select>
+            <select id="ageSegmentFilter"></select>
           </label>
-          <div class="scope-note" id="ageScopeNote"></div>
+          <div class="scope-note" id="ageSegmentNote"></div>
         </section>
 
         <section class="panel is-active" id="panel-executive" role="tabpanel" aria-labelledby="tab-executive">
@@ -121,6 +121,7 @@
 
         <section class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
           <section class="kpi-grid" id="overviewKpis" aria-label="Council overview metrics"></section>
+          <section class="story-grid compact-story" id="overviewStory" aria-label="Council overview story"></section>
 
           <section class="dashboard-grid">
             <article class="chart-panel wide">
@@ -203,6 +204,7 @@
 
         <section class="panel" id="panel-demographics" role="tabpanel" aria-labelledby="tab-demographics" hidden>
           <section class="kpi-grid" id="demographicKpis" aria-label="Age and gender metrics"></section>
+          <section class="story-grid compact-story" id="demographicStory" aria-label="Age bucket story"></section>
 
           <section class="dashboard-grid">
             <article class="chart-panel wide">
@@ -223,6 +225,29 @@
                 </div>
               </div>
               <div id="genderGapChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Age Drop-Off Story</h2>
+                  <p>Where participation falls or recovers between buckets</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="text">Transition</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Change</th>
+                      <th class="text">Interpretation</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ageDropoffRows"></tbody>
+                </table>
+              </div>
             </article>
 
             <article class="chart-panel full">
@@ -254,6 +279,7 @@
 
         <section class="panel" id="panel-geography" role="tabpanel" aria-labelledby="tab-geography" hidden>
           <section class="kpi-grid" id="geographyKpis" aria-label="Geography and structural metrics"></section>
+          <section class="story-grid compact-story" id="geographyStory" aria-label="Geography story"></section>
 
           <section class="dashboard-grid">
             <article class="chart-panel wide">
@@ -317,6 +343,7 @@
 
         <section class="panel" id="panel-time" role="tabpanel" aria-labelledby="tab-time" hidden>
           <section class="kpi-grid" id="timeKpis" aria-label="Time over time metrics"></section>
+          <section class="story-grid compact-story" id="timeStory" aria-label="Time over time story"></section>
 
           <section class="dashboard-grid">
             <article class="chart-panel wide">

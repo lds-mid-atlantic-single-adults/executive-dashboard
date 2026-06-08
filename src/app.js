@@ -14,7 +14,7 @@ const baselinePeriod = meta.baselinePeriod;
 const latestPeriod = meta.latestPeriod;
 const state = {
   activeTab: "executive",
-  ageScope: meta.defaultAgeScope || "allAdults",
+  ageSegment: meta.defaultAgeScope || "allAdults",
   council: "All councils",
   stake: "All stakes / districts",
   query: "",
@@ -60,6 +60,33 @@ const AGE_SEGMENTS = [
     meaning: "Older adult connection, male re-engagement, and durable belonging.",
   },
 ];
+
+const DASHBOARD_VARIABLES = {
+  ageSegment: {
+    id: "ageSegment",
+    label: "Age Segment",
+    defaultValue: meta.defaultAgeScope || "allAdults",
+    allValue: "allAdults",
+    options: [
+      {
+        id: "allAdults",
+        label: "All singles 18+",
+        shortLabel: "All 18+",
+        description: "All adult singles, excluding rows for ages 0-17.",
+      },
+      ...AGE_SEGMENTS,
+    ],
+  },
+  personas: [
+    "Area Seventy / senior leadership",
+    "Executive Advisory Council",
+    "Council representatives",
+    "Stake representatives",
+    "Age-bucket owners",
+  ],
+};
+
+window.MASC_DASHBOARD_VARIABLES = DASHBOARD_VARIABLES;
 
 const fmt = new Intl.NumberFormat("en-US");
 const pctFmt = new Intl.NumberFormat("en-US", {
@@ -172,13 +199,20 @@ function ageSegmentForGroup(ageGroup) {
   return ageSegmentForRank(ageGroupRank(ageGroup));
 }
 
+function selectedAgeSegmentInfo() {
+  return (
+    DASHBOARD_VARIABLES.ageSegment.options.find((option) => option.id === state.ageSegment) ||
+    DASHBOARD_VARIABLES.ageSegment.options[0]
+  );
+}
+
 function rowIncludedByAge(row) {
   if (row.sourceGrain !== "age_group") return true;
   const rank = ageGroupRank(row.ageGroup);
   if (rank < 18) return false;
-  if (state.ageScope === "ysa") return rank >= 18 && rank <= 26;
-  if (state.ageScope === "singleAdults") return rank === 36;
-  if (state.ageScope === "singles46plus") return rank >= 46;
+  if (state.ageSegment === "ysa") return rank >= 18 && rank <= 26;
+  if (state.ageSegment === "singleAdults") return rank === 36;
+  if (state.ageSegment === "singles46plus") return rank >= 46;
   return rank >= 18;
 }
 
@@ -346,6 +380,53 @@ function segmentSummary(label, items) {
   };
 }
 
+function rateDeltaValue(latestSummary, baselineSummary) {
+  return Number.isFinite(latestSummary.rate) && Number.isFinite(baselineSummary.rate)
+    ? latestSummary.rate - baselineSummary.rate
+    : null;
+}
+
+function participationLiftNeeded(summary, targetRate) {
+  if (!Number.isFinite(summary.members) || !Number.isFinite(targetRate)) return null;
+  const targetParticipating = Math.round(summary.members * targetRate);
+  return Math.max(targetParticipating - Math.round(summary.participating || 0), 0);
+}
+
+function ageDropoffData(segments) {
+  const pairs = [
+    [segments.find((item) => item.segmentId === "ysa"), segments.find((item) => item.segmentId === "singleAdults")],
+    [
+      segments.find((item) => item.segmentId === "singleAdults"),
+      segments.find((item) => item.segmentId === "singles46plus"),
+    ],
+  ];
+
+  return pairs
+    .filter(([from, to]) => from && to)
+    .map(([from, to]) => {
+      const change = Number.isFinite(from.rate) && Number.isFinite(to.rate) ? to.rate - from.rate : null;
+      const isDrop = Number.isFinite(change) && change < 0;
+      const isRecovery = Number.isFinite(change) && change > 0;
+      return {
+        transition: `${from.name} to ${to.name}`,
+        from,
+        to,
+        change,
+        interpretation: isDrop
+          ? `${formatDeltaPct(change)} drop-off; this is where council programming must protect continuity.`
+          : isRecovery
+            ? `${formatDeltaPct(change)} recovery; preserve what is working and translate it upstream.`
+            : "No measurable movement between these buckets.",
+      };
+    });
+}
+
+function renderStoryCards(container, cards) {
+  container.innerHTML = cards
+    .map((card) => storyCard(card.title, card.body, card.context))
+    .join("");
+}
+
 function comparisonByKey(latestItems, baselineItems, keyFn) {
   const latestMap = new Map(aggregate(latestItems, keyFn).map((item) => [item.key, item]));
   const baselineMap = new Map(aggregate(baselineItems, keyFn).map((item) => [item.key, item]));
@@ -402,8 +483,8 @@ function priorRows() {
   return unitRowsForPeriod(baselinePeriod);
 }
 
-function ageScopeInfo() {
-  return meta.ageScopes.find((scope) => scope.id === state.ageScope) || meta.ageScopes[0];
+function ageSegmentInfo() {
+  return selectedAgeSegmentInfo();
 }
 
 function kpiCard(label, value, context, delta) {
@@ -420,7 +501,7 @@ function kpiCard(label, value, context, delta) {
 function setKpis(container, latestSummary, baselineSummary, coverage) {
   container.innerHTML = [
     kpiCard(
-      "Members",
+      "Adult Members",
       formatNumber(latestSummary.members),
       `${latestPeriod}; ${formatNumber(latestSummary.units)} units`,
       {
@@ -429,7 +510,7 @@ function setKpis(container, latestSummary, baselineSummary, coverage) {
       }
     ),
     kpiCard(
-      "Participating",
+      "Participating Adults",
       formatNumber(latestSummary.participating),
       `${formatPercent(latestSummary.rate)} aggregate participation`,
       {
@@ -438,7 +519,7 @@ function setKpis(container, latestSummary, baselineSummary, coverage) {
       }
     ),
     kpiCard(
-      "Participation Rate",
+      "Bottom-Line Rate",
       formatPercent(latestSummary.rate),
       `Prior snapshot: ${formatPercent(baselineSummary.rate)}`,
       {
@@ -450,7 +531,7 @@ function setKpis(container, latestSummary, baselineSummary, coverage) {
       }
     ),
     kpiCard(
-      "Matched Units",
+      "Comparable Units",
       formatNumber(coverage.matched),
       `${formatNumber(coverage.newUnits)} new; ${formatNumber(coverage.missingUnits)} prior-only`,
       null
@@ -725,19 +806,19 @@ function renderExecutive() {
 
   $("#executiveNarrative").innerHTML = [
     storyCard(
-      "Executive Brief Question",
+      "Persona: Area Seventy / Senior Leaders",
       "Is the council valuable, and is it making a measurable difference for adult singles across stakes?",
       "Stake Rep Tracker proof frame"
     ),
     storyCard(
-      "What We Can Prove Today",
+      "Bottom-Line Proof Today",
       `${formatNumber(latestSummary.units)} units across ${formatNumber(
         latestSummary.stakes
       )} stakes or districts are represented after excluding under-18 rows; participation movement is visible by council, stake, and unit.`,
       `${latestPeriod} adult source snapshot`
     ),
     storyCard(
-      "What The Tracker Adds",
+      "What Completes The Brief",
       "Stake reps will answer whether singles are more connected, spiritually engaged, forming relationships, and seeing council-created opportunities that would not otherwise exist.",
       "Repeated periodically for time over time proof"
     ),
@@ -790,7 +871,7 @@ function renderExecutive() {
     }))
   );
 
-  $("#executiveCouncilSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
+  $("#executiveCouncilSubtitle").textContent = `${latestPeriod}; ${ageSegmentInfo().label}`;
   renderHorizontalBars(
     $("#executiveCouncilChart"),
     councilLatest.map((item) => ({ name: item.name, value: item.rate })),
@@ -824,6 +905,22 @@ function renderAgeGenderRows(ageData) {
     .join("");
 }
 
+function renderAgeDropoffRows(dropoffs) {
+  $("#ageDropoffRows").innerHTML = dropoffs
+    .map(
+      (item) => `
+      <tr>
+        <td class="text">${escapeHtml(item.transition)}</td>
+        <td>${formatPercent(item.from.rate)}</td>
+        <td>${formatPercent(item.to.rate)}</td>
+        <td><span class="rate-pill${valueClass(item.change)}">${formatDeltaPct(item.change)}</span></td>
+        <td class="text">${escapeHtml(item.interpretation)}</td>
+      </tr>
+    `
+    )
+    .join("");
+}
+
 function renderDemographics() {
   const ageRows = latestAgeSourceRows();
   const segmentData = ageSegmentData(ageRows);
@@ -834,6 +931,10 @@ function renderDemographics() {
   const ysa = segmentData.find((segment) => segment.segmentId === "ysa");
   const singleAdults = segmentData.find((segment) => segment.segmentId === "singleAdults");
   const olderSingles = segmentData.find((segment) => segment.segmentId === "singles46plus");
+  const dropoffs = ageDropoffData(segmentData);
+  const biggestDrop = dropoffs
+    .filter((item) => Number.isFinite(item.change) && item.change < 0)
+    .sort((a, b) => a.change - b.change)[0];
   const maxAgeRate = Math.max(...segmentData.map((item) => item.rate), 0.01);
   const maxGap = Math.max(...segmentData.map((item) => Math.abs(item.genderGap || 0)), 0.01);
 
@@ -863,6 +964,30 @@ function renderDemographics() {
       null
     ),
   ].join("");
+
+  renderStoryCards($("#demographicStory"), [
+    {
+      title: "Persona: Age-Bucket Owners",
+      body: "This page shows where participation falls between life stages, so programming can be designed for the moment people actually disengage.",
+      context: "YSA, SA, and Singles strategies",
+    },
+    {
+      title: "Bottom-Line Lever",
+      body: biggestDrop
+        ? `${biggestDrop.transition} is the sharpest drop at ${formatDeltaPct(
+            biggestDrop.change
+          )}. That is the handoff the council must repair.`
+        : "No participation drop-off is visible between the adult buckets in the current data.",
+      context: "Protect the handoff",
+    },
+    {
+      title: "Gender Lens",
+      body: `Singles 46+ show ${formatGenderGap(
+        olderSingles?.genderGap
+      )}; older outreach should account for male re-engagement separately from general adult programming.`,
+      context: "Different age buckets need different plays",
+    },
+  ]);
 
   $("#ageCurveSubtitle").textContent = `${latestPeriod}; under-18 rows excluded`;
   renderHorizontalBars(
@@ -894,6 +1019,7 @@ function renderDemographics() {
       maxLabelLength: 18,
     }
   );
+  renderAgeDropoffRows(dropoffs);
   renderAgeGenderRows(segmentData);
 }
 
@@ -951,6 +1077,10 @@ function renderGeography() {
   const distanceData = aggregate(latest, (row) => cleanDistanceTier(row.councilDistanceTier)).sort(
     (a, b) => distanceTierRank(a.name) - distanceTierRank(b.name)
   );
+  const highPriorityUnits = latest
+    .slice()
+    .sort((a, b) => (b.unitPriorityIndex || 0) - (a.unitPriorityIndex || 0));
+  const topPriorityUnit = highPriorityUnits[0];
 
   $("#geographyKpis").innerHTML = [
     kpiCard(
@@ -979,7 +1109,29 @@ function renderGeography() {
     ),
   ].join("");
 
-  $("#distanceTierSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
+  renderStoryCards($("#geographyStory"), [
+    {
+      title: "Persona: Logistics And Calendar Owners",
+      body: "This page shows where geography is creating friction, so the council can decide when to localize, cluster, rotate, or replicate.",
+      context: "Reduce travel friction",
+    },
+    {
+      title: "Bottom-Line Lever",
+      body: `${formatNumber(farSummary.units)} units are 40+ miles from the council centroid at ${formatPercent(
+        farSummary.rate
+      )} participation.`,
+      context: "Distance is a design constraint",
+    },
+    {
+      title: "Action Queue",
+      body: topPriorityUnit
+        ? `${topPriorityUnit.unitName} in ${topPriorityUnit.stakeOrDistrict} is the highest priority unit in this selection.`
+        : "No priority unit is available for the current selection.",
+      context: "Turn structure into visits, clusters, and mentoring",
+    },
+  ]);
+
+  $("#distanceTierSubtitle").textContent = `${latestPeriod}; ${ageSegmentInfo().label}`;
   renderHorizontalBars(
     $("#distanceTierChart"),
     distanceData.map((item) => ({
@@ -1037,6 +1189,12 @@ function renderTime() {
     .filter((item) => item.latest && item.baseline && Number.isFinite(item.deltaRate))
     .sort((a, b) => Math.abs(b.deltaRate) - Math.abs(a.deltaRate))
     .slice(0, 20);
+  const bestCouncilMove = councilComparisons
+    .filter((item) => Number.isFinite(item.deltaRate))
+    .sort((a, b) => b.deltaRate - a.deltaRate)[0];
+  const watchCouncilMove = councilComparisons
+    .filter((item) => Number.isFinite(item.deltaRate))
+    .sort((a, b) => a.deltaRate - b.deltaRate)[0];
 
   $("#timeKpis").innerHTML = [
     kpiCard(
@@ -1065,7 +1223,32 @@ function renderTime() {
     ),
   ].join("");
 
-  $("#timeCouncilSubtitle").textContent = `${baselinePeriod} to ${latestPeriod}; ${ageScopeInfo().label}`;
+  renderStoryCards($("#timeStory"), [
+    {
+      title: "Persona: Accountability Review",
+      body: "This page answers whether the council is moving participation over time, not just describing the current state.",
+      context: "Repeatable operating review",
+    },
+    {
+      title: "Bottom-Line Movement",
+      body: `${formatDeltaPct(rateDelta)} rate movement and ${formatDeltaNumber(
+        latestSummary.participating - priorSummary.participating
+      )} participating adults versus the prior source snapshot.`,
+      context: "Movement is the executive proof",
+    },
+    {
+      title: "Where To Investigate",
+      body:
+        bestCouncilMove && watchCouncilMove
+          ? `${bestCouncilMove.name} improved most at ${formatDeltaPct(
+              bestCouncilMove.deltaRate
+            )}; ${watchCouncilMove.name} needs review at ${formatDeltaPct(watchCouncilMove.deltaRate)}.`
+          : "Council movement is not available for this selection.",
+      context: "Scale wins, diagnose losses",
+    },
+  ]);
+
+  $("#timeCouncilSubtitle").textContent = `${baselinePeriod} to ${latestPeriod}; ${ageSegmentInfo().label}`;
   renderHorizontalBars(
     $("#timeCouncilDeltaChart"),
     councilComparisons
@@ -1216,21 +1399,21 @@ function renderRepBrief(latest, prior) {
 
   $("#repBrief").innerHTML = [
     storyCard(
-      "Selected Situation",
+      "Persona: Stake Representative",
       `${formatNumber(latestSummary.members)} members, ${formatNumber(
         latestSummary.participating
       )} participating, ${formatPercent(latestSummary.rate)} current rate.`,
       `${formatDeltaPct(rateDelta)} versus matched prior units`
     ),
     storyCard(
-      "Where To Look First",
+      "Bottom-Line Action",
       `${formatNumber(lowRateUnits.length)} units are below 12% participation; ${formatNumber(
         constrainedUnits.length
       )} are high-isolation / low-participation.`,
       "Local action queue"
     ),
     storyCard(
-      "Internal Benchmark",
+      "Rep Story",
       strongestStake
         ? `${strongestStake.name} leads the selected view at ${formatPercent(
             strongestStake.rate
@@ -1244,7 +1427,7 @@ function renderRepBrief(latest, prior) {
 function renderFilteredAgePattern() {
   const filteredAgeRows = filteredLatestSourceRows();
   const ageData = ageSegmentData(filteredAgeRows);
-  $("#filteredAgeSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
+  $("#filteredAgeSubtitle").textContent = `${latestPeriod}; ${ageSegmentInfo().label}`;
   renderHorizontalBars(
     $("#filteredAgeChart"),
     ageData.map((item) => ({
@@ -1273,10 +1456,38 @@ function renderOverview() {
     a.name.localeCompare(b.name)
   );
   const councilComparisons = comparisonByKey(latest, prior, "coordinatingCouncil");
+  const rankedCouncils = councilLatest.slice().sort((a, b) => b.rate - a.rate);
+  const leadingCouncil = rankedCouncils[0];
+  const trailingCouncil = rankedCouncils[rankedCouncils.length - 1];
+  const liftToLeader = participationLiftNeeded(trailingCouncil || {}, leadingCouncil?.rate);
 
   setKpis($("#overviewKpis"), latestSummary, priorSummary, coverage);
-  $("#latestScaleSubtitle").textContent = `${latestPeriod}; ${ageScopeInfo().label}`;
-  $("#periodComparisonSubtitle").textContent = `${baselinePeriod} to ${latestPeriod}; ${ageScopeInfo().label}`;
+  renderStoryCards($("#overviewStory"), [
+    {
+      title: "Persona: Council Representatives",
+      body: "This page turns the corridor into an operating portfolio: where scale is largest, where rates lag, and where coordination can create lift.",
+      context: "Manage councils as an accountable system",
+    },
+    {
+      title: "Bottom-Line Lever",
+      body:
+        leadingCouncil && trailingCouncil
+          ? `${leadingCouncil.name} leads at ${formatPercent(
+              leadingCouncil.rate
+            )}; ${trailingCouncil.name} trails at ${formatPercent(trailingCouncil.rate)}.`
+          : "Council standing is unavailable for the current selection.",
+      context: "Benchmark against nearby success",
+    },
+    {
+      title: "What Moves The Number",
+      body: Number.isFinite(liftToLeader)
+        ? `${formatNumber(liftToLeader)} additional participating adults would move ${trailingCouncil.name} to the current leading council rate.`
+        : "Use the council summary and change table to identify where the next participation lift is most realistic.",
+      context: "Translate rates into people",
+    },
+  ]);
+  $("#latestScaleSubtitle").textContent = `${latestPeriod}; ${ageSegmentInfo().label}`;
+  $("#periodComparisonSubtitle").textContent = `${baselinePeriod} to ${latestPeriod}; ${ageSegmentInfo().label}`;
   renderCouncilScale($("#councilScaleChart"), councilLatest);
   renderPeriodComparison($("#periodComparisonChart"), latestSummary, priorSummary);
   renderHorizontalBars(
@@ -1336,10 +1547,10 @@ function renderDrilldown() {
 }
 
 function renderSource() {
-  const scope = ageScopeInfo();
-  $("#ageScopeNote").textContent = scope.description;
+  const segment = ageSegmentInfo();
+  $("#ageSegmentNote").textContent = segment.description;
   $("#freshness").textContent = `${meta.sourceSystem}: ${meta.sourceServer}.${meta.sourceDatabase}.${meta.sourceSchema}. ${formatNumber(meta.rowCount)} source rows across ${baselinePeriod} and ${latestPeriod}.`;
-  $("#sourceNote").textContent = `${meta.methodology} ${meta.caveat} The Executive Story tab maps the Stake Rep Tracker questions to the council-value proof model; displayed participation metrics are recomputed from the local SQL extract.`;
+  $("#sourceNote").textContent = `${meta.methodology} ${meta.caveat} The Executive Story tab maps the Stake Rep Tracker questions to the council-value proof model; every page uses the shared ageSegment variable for headline metrics, breakdowns, movement, and drilldowns.`;
 }
 
 function render() {
@@ -1371,10 +1582,10 @@ function wireTabs() {
 }
 
 function wireFilters() {
-  $("#ageScopeFilter").innerHTML = meta.ageScopes
-    .map((scope) => `<option value="${escapeHtml(scope.id)}">${escapeHtml(scope.label)}</option>`)
+  $("#ageSegmentFilter").innerHTML = DASHBOARD_VARIABLES.ageSegment.options
+    .map((segment) => `<option value="${escapeHtml(segment.id)}">${escapeHtml(segment.label)}</option>`)
     .join("");
-  $("#ageScopeFilter").value = state.ageScope;
+  $("#ageSegmentFilter").value = state.ageSegment;
 
   populateSelect(
     $("#councilFilter"),
@@ -1384,8 +1595,8 @@ function wireFilters() {
   );
   refreshStakeOptions();
 
-  $("#ageScopeFilter").addEventListener("change", (event) => {
-    state.ageScope = event.target.value;
+  $("#ageSegmentFilter").addEventListener("change", (event) => {
+    state.ageSegment = event.target.value;
     refreshStakeOptions();
     render();
   });
