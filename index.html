@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mid-Atlantic Singles Council Dashboard</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail" aria-label="Dashboard identity">
+        <div class="mark" aria-hidden="true">MA</div>
+        <div>
+          <p class="rail-title">Mid-Atlantic</p>
+          <p class="rail-subtitle">Singles Council</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Mid-Atlantic Singles Council Dashboard</h1>
+            <p id="freshness" class="freshness"></p>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-button" id="downloadCsv" type="button">Download CSV</button>
+          </div>
+        </header>
+
+        <nav class="tabs" aria-label="Dashboard tabs" role="tablist">
+          <button class="tab is-active" id="tab-overview" aria-selected="true" aria-controls="panel-overview" role="tab" type="button" data-tab="overview">
+            Council Overview
+          </button>
+          <button class="tab" id="tab-drilldown" aria-selected="false" aria-controls="panel-drilldown" role="tab" type="button" data-tab="drilldown">
+            Stake &amp; Ward Drilldown
+          </button>
+        </nav>
+
+        <section class="filters scope-controls" aria-label="Comparison controls">
+          <label>
+            <span>Age Scope</span>
+            <select id="ageScopeFilter"></select>
+          </label>
+          <div class="scope-note" id="ageScopeNote"></div>
+        </section>
+
+        <section class="panel is-active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+          <section class="kpi-grid" id="overviewKpis" aria-label="Council overview metrics"></section>
+
+          <section class="dashboard-grid">
+            <article class="chart-panel wide">
+              <div class="panel-heading">
+                <div>
+                  <h2>Latest Council Scale And Participation</h2>
+                  <p id="latestScaleSubtitle"></p>
+                </div>
+              </div>
+              <div id="councilScaleChart" class="chart-body"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Year-Over-Year Snapshot</h2>
+                  <p id="periodComparisonSubtitle"></p>
+                </div>
+              </div>
+              <div id="periodComparisonChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Participation Rate</h2>
+                  <p>Latest period by coordinating council</p>
+                </div>
+              </div>
+              <div id="councilRateChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Council Summary</h2>
+                  <p>Latest period, sorted by total members</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Council</th>
+                      <th>Units</th>
+                      <th>Members</th>
+                      <th>Part.</th>
+                      <th>Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody id="councilSummaryRows"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Council Change</h2>
+                  <p>Current period versus prior source snapshot</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Council</th>
+                      <th>Prior</th>
+                      <th>Current</th>
+                      <th>Delta</th>
+                      <th>Members</th>
+                    </tr>
+                  </thead>
+                  <tbody id="councilDeltaRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="panel" id="panel-drilldown" role="tabpanel" aria-labelledby="tab-drilldown" hidden>
+          <section class="filters" aria-label="Stake and ward filters">
+            <label>
+              <span>Council</span>
+              <select id="councilFilter"></select>
+            </label>
+            <label>
+              <span>Stake / District</span>
+              <select id="stakeFilter"></select>
+            </label>
+            <label class="search-field">
+              <span>Ward / Branch / Unit</span>
+              <input id="unitSearch" type="search" placeholder="Search units" />
+            </label>
+          </section>
+
+          <section class="kpi-grid" id="drilldownKpis" aria-label="Filtered drilldown metrics"></section>
+
+          <section class="dashboard-grid">
+            <article class="chart-panel wide">
+              <div class="panel-heading">
+                <div>
+                  <h2>Stake And District Participation</h2>
+                  <p id="stakeChartSubtitle"></p>
+                </div>
+              </div>
+              <div id="stakeRateChart" class="chart-body"></div>
+            </article>
+
+            <article class="chart-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Stake Rate Change</h2>
+                  <p>Current period versus prior source snapshot</p>
+                </div>
+              </div>
+              <div id="stakeDeltaChart" class="chart-body compact"></div>
+            </article>
+
+            <article class="chart-panel full">
+              <div class="panel-heading table-heading">
+                <div>
+                  <h2>Ward / Branch / Unit Detail</h2>
+                  <p id="detailCount"></p>
+                </div>
+                <select id="sortUnits" aria-label="Sort unit detail">
+                  <option value="membersDesc">Members, high to low</option>
+                  <option value="rateAsc">Participation rate, low to high</option>
+                  <option value="rateDesc">Participation rate, high to low</option>
+                  <option value="unitAsc">Unit name, A to Z</option>
+                </select>
+              </div>
+              <div class="table-wrap detail-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Unit</th>
+                      <th>Stake / District</th>
+                      <th>Council</th>
+                      <th>City</th>
+                      <th>Members</th>
+                      <th>Participating</th>
+                      <th>Current</th>
+                      <th>Prior</th>
+                      <th>Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody id="unitDetailRows"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="methodology" aria-label="Source and methodology">
+          <h2>Source</h2>
+          <p id="sourceNote"></p>
+        </section>
+      </main>
+    </div>
+
+    <script src="data/council-data.js"></script>
+    <script src="src/app.js"></script>
+  </body>
+</html>
