@@ -597,12 +597,153 @@ input:focus {
   text-transform: uppercase;
 }
 
+.map-figure {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
 .council-map {
   display: block;
   width: 100%;
-  min-height: 290px;
+  aspect-ratio: 900 / 520;
+  min-height: 300px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  overflow: hidden;
+  background: #dce7ea;
+}
+
+.map-backdrop {
+  fill: #dce7ea;
+}
+
+.map-tile {
+  opacity: 0.96;
+}
+
+.map-softener {
+  fill: #ffffff;
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.unit-centroid-link {
+  stroke: var(--church-blue);
+  stroke-width: 1.05;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.unit-dot {
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.centroid-marker {
+  fill: #ffffff;
+  stroke: var(--church-blue);
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.centroid-core {
+  fill: var(--church-blue);
+}
+
+.centroid-label {
+  pointer-events: none;
+}
+
+.centroid-label rect {
+  fill: rgba(255, 255, 255, 0.9);
+  stroke: rgba(13, 79, 103, 0.22);
+}
+
+.centroid-label text {
+  fill: var(--ink);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.map-legend,
+.map-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-legend span,
+.map-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 25px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.map-summary strong {
+  color: var(--ink);
+}
+
+.legend-line {
+  width: 24px;
+  height: 0;
+  border-top: 2px solid var(--church-blue);
+  opacity: 0.75;
+}
+
+.legend-centroid {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--church-blue);
+  background: #ffffff;
+  transform: rotate(45deg);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid #ffffff;
+}
+
+.legend-dot.good {
+  background: var(--green);
+}
+
+.legend-dot.watch {
+  background: var(--amber);
+}
+
+.legend-dot.risk {
+  background: var(--red);
+}
+
+.map-attribution {
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-align: right;
+}
+
+.map-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
 }
 
 .table-wrap {

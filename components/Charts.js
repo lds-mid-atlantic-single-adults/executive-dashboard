@@ -104,37 +104,325 @@ export function OpportunityTable({ rows }) {
   );
 }
 
-export function CouncilMap({ rows, selectedCouncil = "all" }) {
-  const points = rows.filter((row) => Number.isFinite(row.cityLatitude) && Number.isFinite(row.cityLongitude));
-  const minLat = Math.min(...points.map((row) => row.cityLatitude), 35);
-  const maxLat = Math.max(...points.map((row) => row.cityLatitude), 42);
-  const minLon = Math.min(...points.map((row) => row.cityLongitude), -81);
-  const maxLon = Math.max(...points.map((row) => row.cityLongitude), -73);
-  const x = (lon) => ((lon - minLon) / Math.max(maxLon - minLon, 0.01)) * 820 + 40;
-  const y = (lat) => 440 - ((lat - minLat) / Math.max(maxLat - minLat, 0.01)) * 380;
+const MAP_WIDTH = 900;
+const MAP_HEIGHT = 520;
+const MAP_PADDING = 30;
+const TILE_SIZE = 256;
+const MAX_TILE_COUNT = 44;
+const MAX_MERCATOR_LAT = 85.05112878;
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(Number.isFinite(value) ? value : min, min), max);
+}
+
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function hasMapCoordinates(row) {
+  return (
+    Number.isFinite(row.cityLatitude) &&
+    Number.isFinite(row.cityLongitude) &&
+    row.cityLatitude >= -MAX_MERCATOR_LAT &&
+    row.cityLatitude <= MAX_MERCATOR_LAT &&
+    row.cityLongitude >= -180 &&
+    row.cityLongitude <= 180
+  );
+}
+
+function haversineMiles(latA, lonA, latB, lonB) {
+  const earthRadiusMiles = 3958.8;
+  const deltaLat = toRadians(latB - latA);
+  const deltaLon = toRadians(lonB - lonA);
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(toRadians(latA)) * Math.cos(toRadians(latB)) * Math.sin(deltaLon / 2) ** 2;
+  return earthRadiusMiles * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function latLonToWorld(lat, lon, zoom) {
+  const safeLat = clamp(lat, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT);
+  const sinLat = Math.sin(toRadians(safeLat));
+  const scale = TILE_SIZE * 2 ** zoom;
+  return {
+    x: ((lon + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
+  };
+}
+
+function expandGeoBounds(points) {
+  const lats = points.map((point) => point.lat ?? point.cityLatitude);
+  const lons = points.map((point) => point.lon ?? point.cityLongitude);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const latSpan = Math.max(maxLat - minLat, 0.01);
+  const lonSpan = Math.max(maxLon - minLon, 0.01);
+  const latPad = Math.max(latSpan * 0.14, 0.12);
+  const lonPad = Math.max(lonSpan * 0.14, 0.12);
+
+  return {
+    minLat: clamp(minLat - latPad, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT),
+    maxLat: clamp(maxLat + latPad, -MAX_MERCATOR_LAT, MAX_MERCATOR_LAT),
+    minLon: clamp(minLon - lonPad, -179.9, 179.9),
+    maxLon: clamp(maxLon + lonPad, -179.9, 179.9)
+  };
+}
+
+function projectedBounds(bounds, zoom) {
+  const northWest = latLonToWorld(bounds.maxLat, bounds.minLon, zoom);
+  const southEast = latLonToWorld(bounds.minLat, bounds.maxLon, zoom);
+  return {
+    minX: Math.min(northWest.x, southEast.x),
+    maxX: Math.max(northWest.x, southEast.x),
+    minY: Math.min(northWest.y, southEast.y),
+    maxY: Math.max(northWest.y, southEast.y)
+  };
+}
+
+function tileRange(bounds, zoom) {
+  const projected = projectedBounds(bounds, zoom);
+  const tileMax = 2 ** zoom - 1;
+  const startX = Math.floor(projected.minX / TILE_SIZE);
+  const endX = Math.floor(projected.maxX / TILE_SIZE);
+  const startY = clamp(Math.floor(projected.minY / TILE_SIZE), 0, tileMax);
+  const endY = clamp(Math.floor(projected.maxY / TILE_SIZE), 0, tileMax);
+  return {
+    startX,
+    endX,
+    startY,
+    endY,
+    count: Math.max(endX - startX + 1, 0) * Math.max(endY - startY + 1, 0)
+  };
+}
+
+function chooseZoom(bounds) {
+  for (let zoom = 10; zoom >= 5; zoom -= 1) {
+    const range = tileRange(bounds, zoom);
+    if (range.count <= MAX_TILE_COUNT) return zoom;
+  }
+  return 5;
+}
+
+function buildMapViewport(points) {
+  const bounds = expandGeoBounds(points);
+  const zoom = chooseZoom(bounds);
+  const projected = projectedBounds(bounds, zoom);
+  const spanX = Math.max(projected.maxX - projected.minX, 1);
+  const spanY = Math.max(projected.maxY - projected.minY, 1);
+  const scale = Math.min((MAP_WIDTH - MAP_PADDING * 2) / spanX, (MAP_HEIGHT - MAP_PADDING * 2) / spanY);
+  const offsetX = (MAP_WIDTH - spanX * scale) / 2;
+  const offsetY = (MAP_HEIGHT - spanY * scale) / 2;
+  const range = tileRange(bounds, zoom);
+  const tileModulo = 2 ** zoom;
+  const tiles = [];
+
+  for (let tileX = range.startX; tileX <= range.endX; tileX += 1) {
+    for (let tileY = range.startY; tileY <= range.endY; tileY += 1) {
+      const wrappedX = ((tileX % tileModulo) + tileModulo) % tileModulo;
+      tiles.push({
+        key: `${zoom}-${tileX}-${tileY}`,
+        href: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${tileY}.png`,
+        x: (tileX * TILE_SIZE - projected.minX) * scale + offsetX,
+        y: (tileY * TILE_SIZE - projected.minY) * scale + offsetY,
+        size: TILE_SIZE * scale
+      });
+    }
+  }
+
+  return {
+    zoom,
+    tiles,
+    toScreen(lat, lon) {
+      const point = latLonToWorld(lat, lon, zoom);
+      return {
+        x: (point.x - projected.minX) * scale + offsetX,
+        y: (point.y - projected.minY) * scale + offsetY
+      };
+    }
+  };
+}
+
+function stakeCentroids(points) {
+  const groups = new Map();
+  points.forEach((row) => {
+    const stake = row.stakeOrDistrict || "Unassigned stake";
+    const weight = Math.max(row.members || 0, 1);
+    if (!groups.has(stake)) {
+      groups.set(stake, { stake, lat: 0, lon: 0, weight: 0, members: 0, participating: 0, units: 0 });
+    }
+    const group = groups.get(stake);
+    group.lat += row.cityLatitude * weight;
+    group.lon += row.cityLongitude * weight;
+    group.weight += weight;
+    group.members += row.members || 0;
+    group.participating += row.participating || 0;
+    group.units += 1;
+  });
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      lat: group.lat / group.weight,
+      lon: group.lon / group.weight,
+      rate: group.members > 0 ? group.participating / group.members : null
+    }))
+    .sort((a, b) => b.members - a.members);
+}
+
+function nearestCentroid(row, centroids) {
+  return centroids.reduce(
+    (best, centroid) => {
+      const distance = haversineMiles(row.cityLatitude, row.cityLongitude, centroid.lat, centroid.lon);
+      return !best || distance < best.distance ? { centroid, distance } : best;
+    },
+    null
+  );
+}
+
+function rateColor(rate) {
+  if (rate >= 0.18) return "#2f7d59";
+  if (rate >= 0.08) return "#a86618";
+  return "#a94442";
+}
+
+function unitRadius(row) {
+  return Math.max(4.5, Math.min(13, Math.sqrt(row.members || 1) / 2.5));
+}
+
+function shortStakeName(stake) {
+  return String(stake || "Stake")
+    .replace(/\b(Stake|District)\b/gi, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(" ");
+}
+
+export function CouncilMap({ rows, centroidRows = rows, selectedCouncil = "all" }) {
+  const points = rows.filter(hasMapCoordinates);
+
+  if (!points.length) {
+    return <div className="map-empty">No mapped units have latitude and longitude for this filter.</div>;
+  }
+
+  const centroidPoints = centroidRows.filter(hasMapCoordinates);
+  const centroids = stakeCentroids(centroidPoints.length ? centroidPoints : points);
+  const viewport = buildMapViewport([...points, ...centroids]);
+  const relationships = points
+    .map((row) => {
+      const nearest = nearestCentroid(row, centroids);
+      const unit = viewport.toScreen(row.cityLatitude, row.cityLongitude);
+      const centroid = nearest ? viewport.toScreen(nearest.centroid.lat, nearest.centroid.lon) : null;
+      return {
+        row,
+        unit,
+        nearest,
+        centroid,
+        active: selectedCouncil === "all" || row.coordinatingCouncil === selectedCouncil
+      };
+    })
+    .filter((item) => item.nearest && item.centroid);
+  const farthest = [...relationships].sort((a, b) => b.nearest.distance - a.nearest.distance)[0];
+  const crossStakeCount = relationships.filter((item) => item.nearest.centroid.stake !== item.row.stakeOrDistrict).length;
+  const labeledCentroids = centroids
+    .slice(0, centroids.length <= 10 ? centroids.length : 10)
+    .map((centroid) => ({ ...centroid, screen: viewport.toScreen(centroid.lat, centroid.lon), label: shortStakeName(centroid.stake) }));
 
   return (
-    <svg className="council-map" viewBox="0 0 900 500" role="img" aria-label="Unit geography by participation rate">
-      <defs>
-        <linearGradient id="mapBg" x1="0" x2="1">
-          <stop offset="0%" stopColor="#eef7ff" />
-          <stop offset="100%" stopColor="#f8fbf8" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="900" height="500" rx="24" fill="url(#mapBg)" />
-      <path d="M120 420 C 230 250, 300 180, 430 210 S 640 170, 790 80" fill="none" stroke="#9bb8cf" strokeWidth="10" opacity="0.28" />
-      <path d="M150 455 C 260 300, 315 260, 460 275 S 670 230, 820 120" fill="none" stroke="#2c7a7b" strokeWidth="3" opacity="0.35" />
-      {points.map((row) => {
-        const active = selectedCouncil === "all" || row.coordinatingCouncil === selectedCouncil;
-        const rate = row.rate || 0;
-        const color = rate >= 0.18 ? "#15803d" : rate >= 0.08 ? "#d97706" : "#dc2626";
-        return (
-          <g key={row.unitJoinKey} opacity={active ? 0.9 : 0.18}>
-            <circle cx={x(row.cityLongitude)} cy={y(row.cityLatitude)} r={Math.max(4, Math.min(18, Math.sqrt(row.members || 1)))} fill={color} />
-            <title>{`${row.unitName}: ${pct(row.rate)} (${num(row.members)} singles)`}</title>
+    <figure className="map-figure">
+      <svg
+        className="council-map actual-map"
+        viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
+        role="img"
+        aria-label="OpenStreetMap basemap showing unit points connected to their closest computed stake centroid"
+      >
+        <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} className="map-backdrop" />
+        {viewport.tiles.map((tile) => (
+          <image
+            key={tile.key}
+            className="map-tile"
+            href={tile.href}
+            x={tile.x}
+            y={tile.y}
+            width={tile.size}
+            height={tile.size}
+            preserveAspectRatio="none"
+          />
+        ))}
+        <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} className="map-softener" />
+
+        {relationships.map((item) => (
+          <line
+            key={`${item.row.unitJoinKey}-to-centroid`}
+            className="unit-centroid-link"
+            x1={item.unit.x}
+            y1={item.unit.y}
+            x2={item.centroid.x}
+            y2={item.centroid.y}
+            opacity={item.active ? 0.34 : 0.08}
+          >
+            <title>{`${item.row.unitName} to ${item.nearest.centroid.stake}: ${item.nearest.distance.toFixed(1)} mi`}</title>
+          </line>
+        ))}
+
+        {centroids.map((centroid) => {
+          const screen = viewport.toScreen(centroid.lat, centroid.lon);
+          return (
+            <g key={centroid.stake} className="centroid" transform={`translate(${screen.x} ${screen.y})`}>
+              <rect className="centroid-marker" x="-7" y="-7" width="14" height="14" transform="rotate(45)" />
+              <circle className="centroid-core" r="3" />
+              <title>{`${centroid.stake} computed centroid: ${num(centroid.units)} units, ${num(centroid.members)} singles, ${pct(centroid.rate)}`}</title>
+            </g>
+          );
+        })}
+
+        {relationships.map((item) => (
+          <g key={item.row.unitJoinKey} opacity={item.active ? 0.95 : 0.18}>
+            <circle
+              className="unit-dot"
+              cx={item.unit.x}
+              cy={item.unit.y}
+              r={unitRadius(item.row)}
+              fill={rateColor(item.row.rate)}
+            />
+            <title>{`${item.row.unitName}: ${pct(item.row.rate)} (${num(item.row.members)} singles). Nearest centroid: ${item.nearest.centroid.stake}, ${item.nearest.distance.toFixed(1)} mi.`}</title>
           </g>
-        );
-      })}
-    </svg>
+        ))}
+
+        {labeledCentroids.map((centroid) => {
+          const labelWidth = Math.min(Math.max(centroid.label.length * 5.8 + 14, 56), 160);
+          const labelX = clamp(centroid.screen.x + 12, 8, MAP_WIDTH - labelWidth - 8);
+          const labelY = clamp(centroid.screen.y - 22, 10, MAP_HEIGHT - 26);
+          return (
+            <g key={`${centroid.stake}-label`} className="centroid-label">
+              <rect x={labelX} y={labelY} width={labelWidth} height="19" rx="5" />
+              <text x={labelX + 7} y={labelY + 13}>{centroid.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="map-legend" aria-label="Map legend">
+        <span><i className="legend-line" /> unit to closest centroid</span>
+        <span><i className="legend-centroid" /> stake centroid</span>
+        <span><i className="legend-dot good" /> 18%+ participation</span>
+        <span><i className="legend-dot watch" /> 8-18%</span>
+        <span><i className="legend-dot risk" /> under 8%</span>
+      </div>
+      <div className="map-summary">
+        <span><strong>{num(points.length)}</strong> mapped units</span>
+        <span><strong>{num(centroids.length)}</strong> computed stake centroids</span>
+        <span><strong>{num(crossStakeCount)}</strong> nearest to another stake centroid</span>
+        {farthest ? (
+          <span>
+            Farthest nearest: <strong>{farthest.row.unitName}</strong> {farthest.nearest.distance.toFixed(1)} mi
+          </span>
+        ) : null}
+      </div>
+      <figcaption className="map-attribution">
+        Map tiles: (c) OpenStreetMap contributors. Centroids are member-weighted from the broader period and council context.
+      </figcaption>
+    </figure>
   );
 }

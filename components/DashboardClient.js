@@ -45,6 +45,10 @@ export default function DashboardClient({ dataset }) {
   }, [dataset.rows, dataset.metadata.periods, filters.council]);
 
   const model = useMemo(() => buildDashboardModel(dataset, filters), [dataset, filters]);
+  const centroidModel = useMemo(
+    () => buildDashboardModel(dataset, { ...filters, stake: ALL, unitQuery: "" }),
+    [dataset, filters]
+  );
   const councilMax = Math.max(...model.councilSummary.map((item) => item.rate || 0), 0.01);
   const stakeMax = Math.max(...model.stakeSummary.map((item) => item.rate || 0), 0.01);
   const selectedCouncil = filters.council === ALL ? "all" : filters.council;
@@ -96,9 +100,9 @@ export default function DashboardClient({ dataset }) {
         <GlobalFilters filters={filters} options={options} onChange={setFilter} />
 
         {activeTab === "executive" ? (
-          <ExecutiveView model={model} councilMax={councilMax} selectedCouncil={selectedCouncil} />
+          <ExecutiveView model={model} councilMax={councilMax} selectedCouncil={selectedCouncil} centroidRows={centroidModel.latest} />
         ) : (
-          <DrilldownView model={model} filters={filters} options={options} onChange={setFilter} stakeMax={stakeMax} selectedCouncil={selectedCouncil} />
+          <DrilldownView model={model} filters={filters} options={options} onChange={setFilter} stakeMax={stakeMax} selectedCouncil={selectedCouncil} centroidRows={centroidModel.latest} />
         )}
 
         <footer className="source-footer">
@@ -151,7 +155,7 @@ function GlobalFilters({ filters, options, onChange }) {
   );
 }
 
-function ExecutiveView({ model, councilMax, selectedCouncil }) {
+function ExecutiveView({ model, councilMax, selectedCouncil, centroidRows }) {
   const participatingDelta = model.latestSummary.participating - model.priorSummary.participating;
   const momentumScore = Math.round(Math.min(Math.max(50 + (model.movement || 0) * 420 + participatingDelta / 220, 0), 100));
   const opportunityRate = model.opportunities[0]?.targetRate || model.latestSummary.rate;
@@ -204,10 +208,10 @@ function ExecutiveView({ model, councilMax, selectedCouncil }) {
       <section className="grid-two">
         <article className="panel">
           <div className="section-title">
-            <h2>Geography And High-Density Gaps</h2>
-            <p>Bubble size is adult population; color is participation health.</p>
+            <h2>Units To Closest Stake Centroid</h2>
+            <p>Latitude and longitude plotted on a real map; lines show nearest computed stake centroid.</p>
           </div>
-          <CouncilMap rows={model.latest} selectedCouncil={selectedCouncil} />
+          <CouncilMap rows={model.latest} centroidRows={centroidRows} selectedCouncil={selectedCouncil} />
         </article>
         <article className="panel">
           <div className="section-title">
@@ -221,7 +225,7 @@ function ExecutiveView({ model, councilMax, selectedCouncil }) {
   );
 }
 
-function DrilldownView({ model, filters, options, onChange, stakeMax, selectedCouncil }) {
+function DrilldownView({ model, filters, options, onChange, stakeMax, selectedCouncil, centroidRows }) {
   const stakeRows = aggregateBy(model.latest, "stakeOrDistrict").sort((a, b) => b.rate - a.rate);
 
   return (
@@ -272,9 +276,9 @@ function DrilldownView({ model, filters, options, onChange, stakeMax, selectedCo
         <article className="panel">
           <div className="section-title">
             <h2>Local Geography</h2>
-            <p>Current filter mapped to unit geography.</p>
+            <p>Current filter mapped by coordinates with nearest-centroid relationships.</p>
           </div>
-          <CouncilMap rows={model.latest} selectedCouncil={selectedCouncil} />
+          <CouncilMap rows={model.latest} centroidRows={centroidRows} selectedCouncil={selectedCouncil} />
         </article>
       </section>
 
