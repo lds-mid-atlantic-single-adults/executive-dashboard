@@ -1,73 +1,155 @@
-# Mid-Atlantic Singles Council Dashboard
+# Mid-Atlantic Singles Council Executive Dashboard
 
-Static, public-shareable dashboard built from local Mid-Atlantic Singles Council participation extracts:
+Fresh static Next.js / React rebuild of the Mid-Atlantic Single Adult Executive Dashboard. The app is designed as an executive decision-support platform: within 30 seconds, leaders should see who is being reached, who is being missed, and where leadership should focus next.
 
-`USNE - SA participation - 03 Nov 2025.hyper`
+## Architecture
 
-The runtime dashboard has no Tableau dependency, no paid BI license dependency, no CDN, and no build step. It is plain HTML, CSS, JavaScript, and an exported aggregate data file.
+- `app/`: Next.js App Router pages and API route handlers.
+- `components/`: reusable KPI, chart, map, table, and recommendation components.
+- `lib/`: metric, recommendation, opportunity-score, and executive-summary logic.
+- `sql/`: STG/RV/BV/IM Data Vault scripts.
+- `etl/`: CSV-to-STG ingestion utility with record source, load date, source metadata, and hash diff lineage.
+- `data/`: SQL-derived static export used by the GitHub Pages build.
+- `.github/workflows/deploy-pages.yml`: GitHub Actions workflow that builds and deploys `out/` to GitHub Pages.
 
-## Open Locally
+## Run The App
 
-Open `index.html` directly, or run a small local server:
-
-```powershell
-python -m http.server 4173
-```
-
-Then visit `http://localhost:4173`.
-
-## Refresh Data
-
-The checked-in dashboard reads `data/council-data.js`. To refresh from a newer Hyper extract:
-
-1. Put the new `.hyper` extract in the project folder.
-2. Update `SOURCE` in `scripts/export_hyper.py` if the filename changed.
-3. Install the one-time converter dependency if needed:
+Install dependencies:
 
 ```powershell
-python -m pip install --target .vendor tableauhyperapi
+npm install
 ```
 
-4. Run:
+Start Next.js:
 
 ```powershell
-python scripts/export_hyper.py
+npm run dev
 ```
 
-## Publish To A Public URL
+Open:
 
-Because the dashboard is static, the simplest options are:
+```text
+http://localhost:3000
+```
 
-- GitHub Pages: push this folder to a GitHub repo, then enable Pages from the repo root.
-- Netlify: deploy the folder as a static site.
-- Vercel: import the repo as a static project.
+The old static `index.html` is only a launcher notice. The dashboard itself lives in the Next.js App Router.
 
-Anything in `data/council-data.js` is visible to anyone with the URL. The current file contains aggregate unit-level counts, not individual records.
+## GitHub Pages Deployment
 
-## Dashboard Tabs
+This project is configured for static export with:
 
-- Executive Story: Area Seventy / senior-leadership proof of whether the council is valuable and moving outcomes.
-- Council Overview: council-rep operating portfolio for scale, participation gaps, and cross-council lift.
-- Age & Gender: age-bucket owner view of YSA, Single Adult, and Singles participation drop-offs.
-- Geography: logistics and calendar owner view of distance friction, archetypes, and priority units.
-- Time Over Time: accountability review of whether participation is improving by council, stake, and unit.
-- Stake & Unit Action: stake-rep view of local situation, benchmarks, and action queue.
+```js
+output: "export"
+```
 
-## Universal Variables
+Deploy flow:
 
-The dashboard exposes a shared `ageSegment` variable through `window.MASC_DASHBOARD_VARIABLES` and the metadata `filterVariables.ageSegment` contract. The options are:
+1. Refresh the SQL-derived data locally when needed.
+2. Commit `data/council-data.js` and `data/masc-sql-source-rows.csv`.
+3. Push to `main`.
+4. In GitHub, enable Pages with **Source: GitHub Actions**.
+5. The workflow builds the static `out/` folder and deploys it.
 
-- `allAdults`: All singles 18+
-- `ysa`: Young Single Adults (18-35)
-- `singleAdults`: Single Adults (36-45)
-- `singles46plus`: Singles (46+)
+Expected project URL:
 
-Every page uses the same selected age segment for headline metrics, council/stake breakdowns, geography, time-over-time movement, and unit drilldowns.
+```text
+https://lds-mid-atlantic-single-adults.github.io/executive-dashboard/
+```
 
-## Executive Brief Proof Model
+The deployed site does not query SQL Server live. It uses the checked-in SQL-derived extract.
 
-The Executive Story tab is mapped to `Mid-Atlantic_Singles_Council_-_Stake_Rep_Tracker.docx`. That tracker defines the council-value evidence model across community and participation, spiritual engagement, relationships and marriage, council coordination and impact, and open feedback. The SQL extract populates the participation and movement signals; tracker response data is still needed to populate the spiritual, relationship, coordination, and qualitative proof points.
+Build locally:
 
-## Source Caveat
+```powershell
+npm run build
+```
 
-The available SQL sources are 2025 Q3 and 2026 Q1. The dashboard excludes 2026 rows for ages 0-17. The 2025 Q3 rows are unit-level and do not include age or gender fields. The 2026 Q1 rows are age-group level and include age group, sex counts, participating male/female counts, unit zip code, distance tiers, and structural priority fields. Time-over-time views therefore compare the best available snapshots, not a same-quarter year-over-year series. Age-segment filters apply to the current 2026 snapshot; the prior 2025 Q3 source remains unit-level.
+Serve the exported output:
+
+```powershell
+npm run serve:out
+```
+
+## Data Vault Setup
+
+Run the Data Vault / IM scripts against `BV`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\run_data_vault_refresh.ps1
+```
+
+Scripts:
+
+- `sql/00_create_schemas.sql`: creates `STG`, `RV`, `BV`, and `IM`.
+- `sql/01_data_vault_tables.sql`: creates staging, raw vault hubs/links/satellites.
+- `sql/02_load_vault_from_staging.sql`: loads STG rows into RV.
+- `sql/03_business_vault_and_im.sql`: creates BV and IM views from Data Vault tables.
+- `sql/04_existing_masc_sources_to_im.sql`: creates `IM.masc_dashboard_source_rows` from the current `masc.[mid-atlantic-singles-council-*]` SQL objects.
+
+## CSV ETL
+
+Example:
+
+```powershell
+python etl\masc_csv_to_stg.py `
+  --file "C:\Users\bradl\OneDrive\Desktop\Summer 2025\Singles+Task+Force+Survey+Research+2025_Tableau.csv" `
+  --period "2025 Q3" `
+  --period-year 2025 `
+  --period-quarter 3 `
+  --source-grain survey_response
+```
+
+The ETL excludes under-18 rows at the dashboard metric layer and preserves source lineage fields in STG.
+
+## Refresh Static Dashboard Data
+
+After refreshing SQL objects, rebuild the checked-in static payload:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\export_sql_server.ps1
+```
+
+The GitHub Pages build reads `data/council-data.js` at build time and copies the downloadable CSV into `public/data/`.
+
+## Dashboard Views
+
+The app has two major tabs:
+
+- Executive Council View: top-line KPIs, dynamic executive summary, Leadership Action Center, age/gender reach, momentum, opportunity scoring, and geography.
+- Stake / Ward Drilldown View: council/stake/unit filters, local KPIs, local recommendations, local geography, and unit action queue.
+
+## Recommendation Engine
+
+Recommendations are generated from measurable conditions, including:
+
+- gender imbalance
+- underutilized population
+- retention / handoff drop-off
+- geographic friction
+- emerging success
+- declining unit
+- YSA-to-mid-single transition risk
+
+Each card includes issue, severity, issue type, trend, measured condition, actions, estimated impact, confidence, and priority rank.
+
+Opportunity score:
+
+```text
+Opportunity Score = Population Impact x Engagement Gap x Trend Severity x Intervention Probability
+```
+
+## Validation
+
+Validate the static SQL-derived payload:
+
+```powershell
+npm run validate:data
+```
+
+or:
+
+```powershell
+python scripts\validate_dashboard_data.py
+```
+
+The validator confirms row counts, Mid-Atlantic SQL source objects, required fields, dashboard payload readiness, and exclusion of `0-17` age-group rows.

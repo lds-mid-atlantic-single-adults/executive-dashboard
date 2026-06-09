@@ -16,8 +16,8 @@ window.MASC_DASHBOARD_DATA = {
         "rows": 2109
       }
     ],
-    "exportedAt": "2026-06-07T23:55:33.3554503Z",
-    "builtAt": "2026-06-08T04:34:43.647190+00:00",
+    "exportedAt": "2026-06-09T04:40:44.2514823Z",
+    "builtAt": "2026-06-09T04:40:44.578921+00:00",
     "rowCount": 2508,
     "periods": [
       {

@@ -1,0 +1,19 @@
+{
+  "name": "mid-atlantic-singles-executive-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/prepare_static_assets.mjs",
+    "prebuild": "node scripts/prepare_static_assets.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "serve:out": "npx serve out",
+    "validate:data": "python scripts/validate_dashboard_data.py"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "next": "^14.2.23",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

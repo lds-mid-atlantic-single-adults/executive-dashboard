@@ -1,0 +1,81 @@
+SET NOCOUNT ON;
+GO
+
+CREATE OR ALTER VIEW IM.masc_dashboard_source_rows AS
+WITH source_rows AS (
+    SELECT
+        CAST(N'2025 Q3' AS nvarchar(20)) AS period,
+        CAST(2025 AS int) AS periodYear,
+        CAST(3 AS int) AS periodQuarter,
+        CAST(1 AS int) AS periodOrder,
+        CAST(N'masc.[mid-atlantic-singles-council-2025-q3_cleaned]' AS nvarchar(160)) AS sourceObject,
+        CAST(N'unit' AS nvarchar(20)) AS sourceGrain,
+        CAST(NULL AS nvarchar(40)) AS ageGroup,
+        LOWER(CONCAT(LTRIM(RTRIM(Stake_or_District)), '|', COALESCE(NULLIF(LTRIM(RTRIM(column4)), ''), LTRIM(RTRIM(Unit_Name))))) AS unitJoinKey,
+        CAST(NULL AS nvarchar(40)) AS unitCode,
+        CAST(NULL AS nvarchar(20)) AS unitZipCode,
+        COALESCE(NULLIF(LTRIM(RTRIM(column4)), ''), LTRIM(RTRIM(Unit_Name))) AS unitName,
+        LTRIM(RTRIM(Coordinating_Council)) AS coordinatingCouncil,
+        LTRIM(RTRIM(Stake_or_District)) AS stakeOrDistrict,
+        LTRIM(RTRIM(State)) AS state,
+        LTRIM(RTRIM(City)) AS city,
+        LTRIM(RTRIM(Date)) AS snapshotDate,
+        CAST(Member AS float) AS members,
+        CAST(Participating AS float) AS participating,
+        CAST(NULL AS float) AS males,
+        CAST(NULL AS float) AS females,
+        CAST(NULL AS float) AS notParticipating,
+        CAST(NULL AS float) AS participatingMales,
+        CAST(NULL AS float) AS participatingFemales,
+        CAST(unit_participation_rate AS float) AS sourceParticipationRate,
+        CAST(low_participation_flag AS int) AS lowParticipationFlag,
+        CAST(unit_priority_index_0to1 AS float) AS unitPriorityIndex,
+        CAST(city_priority_index_0to1 AS float) AS cityPriorityIndex,
+        CAST(isolation_vs_perf_quadrant AS nvarchar(120)) AS isolationVsPerformance,
+        CAST(stake_distance_tier AS nvarchar(80)) AS stakeDistanceTier,
+        CAST(council_distance_tier AS nvarchar(80)) AS councilDistanceTier,
+        CAST(Miles_to_CC_Centroid AS float) AS milesToCouncilCentroid,
+        CAST(City_Latitude AS float) AS cityLatitude,
+        CAST(City_Longitude AS float) AS cityLongitude
+    FROM masc.[mid-atlantic-singles-council-2025-q3_cleaned]
+    UNION ALL
+    SELECT
+        CAST(N'2026 Q1' AS nvarchar(20)) AS period,
+        CAST(2026 AS int) AS periodYear,
+        CAST(1 AS int) AS periodQuarter,
+        CAST(2 AS int) AS periodOrder,
+        CAST(N'masc.[mid-atlantic-singles-council-2026-q1_cleaned]' AS nvarchar(160)) AS sourceObject,
+        CAST(N'age_group' AS nvarchar(20)) AS sourceGrain,
+        LTRIM(RTRIM([Age Group])) AS ageGroup,
+        LOWER(CONCAT(LTRIM(RTRIM([Stake or District])), '|', LTRIM(RTRIM([Unit Name])))) AS unitJoinKey,
+        CAST(COALESCE(Unit_Code, [Unit]) AS nvarchar(40)) AS unitCode,
+        CAST(COALESCE(Unit_Zip_Code, [Unit Zip Code]) AS nvarchar(20)) AS unitZipCode,
+        LTRIM(RTRIM([Unit Name])) AS unitName,
+        LTRIM(RTRIM([Coordinating Council])) AS coordinatingCouncil,
+        LTRIM(RTRIM([Stake or District])) AS stakeOrDistrict,
+        LTRIM(RTRIM(State)) AS state,
+        LTRIM(RTRIM(City)) AS city,
+        LTRIM(RTRIM(COALESCE(Snapshot_Date, Date))) AS snapshotDate,
+        CAST(Members AS float) AS members,
+        CAST(Participating AS float) AS participating,
+        CAST(Males AS float) AS males,
+        CAST(Females AS float) AS females,
+        CAST(Not_Participating AS float) AS notParticipating,
+        CAST(Participating_Males AS float) AS participatingMales,
+        CAST(Participating_Females AS float) AS participatingFemales,
+        CAST(age_group_participation_rate AS float) AS sourceParticipationRate,
+        CAST(low_participation_flag AS int) AS lowParticipationFlag,
+        CAST(unit_priority_index_0to1 AS float) AS unitPriorityIndex,
+        CAST(city_priority_index_0to1 AS float) AS cityPriorityIndex,
+        CAST(isolation_vs_perf_quadrant AS nvarchar(120)) AS isolationVsPerformance,
+        CAST(stake_distance_tier AS nvarchar(80)) AS stakeDistanceTier,
+        CAST(council_distance_tier AS nvarchar(80)) AS councilDistanceTier,
+        CAST(Miles_to_CC_Centroid AS float) AS milesToCouncilCentroid,
+        CAST([City Latitude] AS float) AS cityLatitude,
+        CAST([City Longitude] AS float) AS cityLongitude
+    FROM masc.[mid-atlantic-singles-council-2026-q1_cleaned]
+    WHERE LTRIM(RTRIM([Age Group])) <> N'0-17'
+)
+SELECT *
+FROM source_rows;
+GO
