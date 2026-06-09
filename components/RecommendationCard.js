@@ -17,7 +17,7 @@ export default function RecommendationCard({ recommendation }) {
         <div className="recommendation-header">
           <Icon size={22} aria-hidden="true" />
           <div>
-            <p className="eyebrow">{recommendation.issueType} · {recommendation.severity}</p>
+            <p className="eyebrow">{recommendation.issueType} / {recommendation.severity}</p>
             <h3>{recommendation.issue}</h3>
           </div>
         </div>

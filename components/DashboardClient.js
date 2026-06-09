@@ -72,8 +72,8 @@ export default function DashboardClient({ dataset }) {
           <div>
             <h1>Mid-Atlantic Singles Council Executive Dashboard</h1>
             <p>
-              {dataset.metadata.sourceSystem} · {dataset.metadata.sourceServer}.{dataset.metadata.sourceDatabase}.
-              {dataset.metadata.sourceSchema} · {num(dataset.metadata.rowCount)} adult source rows
+              {dataset.metadata.sourceSystem} / {dataset.metadata.sourceServer}.{dataset.metadata.sourceDatabase}.
+              {dataset.metadata.sourceSchema} / {num(dataset.metadata.rowCount)} adult source rows
             </p>
           </div>
           <a className="download-button" href={`${basePath}/data/masc-sql-source-rows.csv`} download>
@@ -174,7 +174,7 @@ function ExecutiveView({ model, councilMax, selectedCouncil }) {
       <section className="panel action-center">
         <div className="section-title">
           <h2>Leadership Action Center</h2>
-          <p>Prescriptive recommendations generated from measurable SQL-derived conditions.</p>
+          <p>Prescriptive recommendations from measurable SQL-derived conditions.</p>
         </div>
         <div className="recommendation-list">
           {model.recommendations.map((recommendation) => (
