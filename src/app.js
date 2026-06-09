@@ -675,45 +675,223 @@ function renderGlobalFilters(options) {
   `;
 }
 
+function lowestAgeSegment(model) {
+  return model.ageSegments.reduce((current, segment) => {
+    if (!Number.isFinite(segment.rate)) return current;
+    return !current || segment.rate < current.rate ? segment : current;
+  }, null);
+}
+
+function emergingSuccessUnits(model) {
+  return comparisonByUnit(model.latest, model.prior)
+    .filter((row) => Number.isFinite(row.deltaRate) && row.deltaRate > 0.03)
+    .sort((a, b) => b.deltaRate - a.deltaRate);
+}
+
+function criticalAttentionUnits(model) {
+  return model.opportunities
+    .filter((row) => (Number.isFinite(row.rate) && row.rate < 0.08) || row.opportunityScore >= 12)
+    .slice(0, 8);
+}
+
+function highOpportunityRows(model) {
+  return model.opportunities.filter((row) => row.engagementGap > 0.05).slice(0, 12);
+}
+
+function formatRateDelta(value) {
+  if (!Number.isFinite(value)) return "No prior comparison";
+  const points = Math.abs(value * 100).toFixed(1);
+  return `${value >= 0 ? "+" : "-"}${points} pts`;
+}
+
+function confidenceTone(confidence) {
+  if (confidence === "High") return "green";
+  if (confidence === "Medium") return "amber";
+  return "blue";
+}
+
+function severityTone(severityValue) {
+  if (severityValue === "Critical" || severityValue === "High") return "red";
+  if (severityValue === "Medium") return "amber";
+  return "green";
+}
+
+function statusBadge(label, tone = "blue") {
+  return `<span class="status-badge badge-${tone}">${escapeHtml(label)}</span>`;
+}
+
+function iconSvg(name) {
+  const icons = {
+    users: `<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="9.5" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>`,
+    trendUp: `<path d="m3 17 6-6 4 4 8-8"></path><path d="M14 7h7v7"></path>`,
+    trendDown: `<path d="m3 7 6 6 4-4 8 8"></path><path d="M14 17h7v-7"></path>`,
+    alert: `<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path>`,
+    target: `<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1.5"></circle>`,
+    compass: `<circle cx="12" cy="12" r="9"></circle><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"></path>`,
+    map: `<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"></path><path d="M9 3v15"></path><path d="M15 6v15"></path>`,
+    clock: `<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>`,
+    repeat: `<path d="m17 1 4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="m7 23-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>`,
+    sparkles: `<path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z"></path><path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z"></path>`,
+    rocket: `<path d="M4.5 16.5c-1.3 1.3-1.5 3.6-1.5 3.6s2.3-.2 3.6-1.5c.7-.7.7-1.8 0-2.5-.6-.5-1.6-.4-2.1.4Z"></path><path d="M9 15 6 12c.6-1.7 1.6-3.3 3-4.7C12.4 3.9 17 3 21 3c0 4-.9 8.6-4.3 12-1.4 1.4-3 2.4-4.7 3l-3-3Z"></path><path d="M14 6h4v4"></path>`
+  };
+  return `
+    <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      ${icons[name] || icons.compass}
+    </svg>
+  `;
+}
+
+function renderExecutiveSummary(model, context) {
+  const topOpportunity = model.opportunities[0];
+  const lowSegment = context.lowestSegment;
+  const trendSentenceText = `${context.trendWord}: ${formatRateDelta(model.movement)} participation change vs ${model.priorPeriod}.`;
+  const focusText = topOpportunity
+    ? `${topOpportunity.unitName} is the highest measured leadership opportunity.`
+    : "No high-risk unit is currently above the opportunity threshold.";
+  const missText = lowSegment
+    ? `${lowSegment.shortLabel} is the most underreached cohort at ${pct(lowSegment.rate)}.`
+    : "No demographic cohort has enough data for a reach callout.";
+  const actionText = model.recommendations[0]?.issue || "No critical intervention is currently flagged.";
+
+  return `
+    <section class="executive-brief">
+      <div class="summary-main">
+        <div class="summary-icon tone-${context.trendTone}">${iconSvg(context.trendTone === "green" ? "trendUp" : "trendDown")}</div>
+        <div>
+          <p class="summary-label">Executive summary</p>
+          <h2>${escapeHtml(model.summaryText)}</h2>
+        </div>
+      </div>
+      <div class="summary-insights">
+        <div class="insight-chip">
+          <span>${iconSvg("users")} Reach</span>
+          <strong>${num(model.latestSummary.participating)} reached</strong>
+        </div>
+        <div class="insight-chip">
+          <span>${iconSvg(context.trendTone === "green" ? "trendUp" : "trendDown")} Momentum</span>
+          <strong>${escapeHtml(trendSentenceText)}</strong>
+        </div>
+        <div class="insight-chip">
+          <span>${iconSvg("alert")} Missed group</span>
+          <strong>${escapeHtml(missText)}</strong>
+        </div>
+        <div class="insight-chip">
+          <span>${iconSvg("target")} Next focus</span>
+          <strong>${escapeHtml(focusText)}</strong>
+        </div>
+      </div>
+      <div class="summary-action">
+        ${statusBadge(context.trendWord, context.trendTone)}
+        <span>${iconSvg("compass")}${escapeHtml(actionText)}</span>
+      </div>
+    </section>
+  `;
+}
+
 function renderExecutiveView(model, councilMax, selectedCouncil, centroidRows) {
   const participatingDelta = model.latestSummary.participating - model.priorSummary.participating;
   const momentumScore = Math.round(Math.min(Math.max(50 + (model.movement || 0) * 420 + participatingDelta / 220, 0), 100));
   const opportunityRate = model.opportunities[0]?.targetRate || model.latestSummary.rate;
+  const lowestSegment = lowestAgeSegment(model);
+  const emergingUnits = emergingSuccessUnits(model);
+  const criticalUnits = criticalAttentionUnits(model);
+  const highOpportunityUnits = highOpportunityRows(model);
+  const trendTone = model.movement >= 0 ? "green" : "red";
+  const trendWord = model.movement >= 0 ? "Improving" : "Declining";
 
   return `
     <section class="view-stack">
-      <section class="executive-brief">
-        <h2>${escapeHtml(model.summaryText)}</h2>
-      </section>
+      ${renderExecutiveSummary(model, {
+        participatingDelta,
+        momentumScore,
+        lowestSegment,
+        emergingUnits,
+        criticalUnits,
+        highOpportunityUnits,
+        trendTone,
+        trendWord
+      })}
 
-      <section class="kpi-grid">
-        ${renderKpi("Singles Reached", num(model.latestSummary.participating), `${num(participatingDelta)} change vs ${model.priorPeriod}`, "green")}
-        ${renderKpi("Participation Rate", pct(model.latestSummary.rate), `Current adult reach across ${num(model.latestSummary.units)} units`, rateTone(model.latestSummary.rate))}
-        ${renderKpi("Momentum Score", `${momentumScore}/100`, model.movement >= 0 ? "Growing or stable momentum" : "Negative momentum", momentumScore >= 65 ? "green" : momentumScore >= 45 ? "amber" : "red")}
-        ${renderKpi("Engagement Trend", model.movement >= 0 ? "Growing" : "Shrinking", `${num(model.coverage.matched)} comparable units`, model.movement >= 0 ? "green" : "red")}
-        ${renderKpi("At-Risk Population", num(model.atRiskPopulation), `${num(model.engagementCounts.longInactive)} long-inactive units`, model.atRiskPopulation ? "red" : "green")}
-        ${renderKpi("Opportunity Population", num(model.opportunityPopulation), `Below ${pct(opportunityRate)} opportunity benchmark`, "purple")}
+      <section class="kpi-grid executive-kpis">
+        ${renderKpi({
+          label: "Singles Reached",
+          value: num(model.latestSummary.participating),
+          detail: `${num(participatingDelta)} change vs ${model.priorPeriod}`,
+          interpretation: `Reached out of ${num(model.latestSummary.members)} measured adults.`,
+          tone: "green",
+          icon: "users",
+          delta: participatingDelta,
+          badge: participatingDelta >= 0 ? "Improving" : "Declining"
+        })}
+        ${renderKpi({
+          label: "Participation Rate",
+          value: pct(model.latestSummary.rate),
+          detail: `${formatRateDelta(model.movement)} vs ${model.priorPeriod}`,
+          interpretation: `Current adult reach across ${num(model.latestSummary.units)} units.`,
+          tone: rateTone(model.latestSummary.rate),
+          icon: model.movement >= 0 ? "trendUp" : "trendDown",
+          delta: model.movement,
+          badge: model.latestSummary.rate >= 0.18 ? "Healthy" : model.latestSummary.rate >= 0.08 ? "Watch" : "Under-engaged"
+        })}
+        ${renderKpi({
+          label: "Momentum Score",
+          value: `${momentumScore}/100`,
+          detail: `${trendWord} region-wide trajectory`,
+          interpretation: `${num(model.coverage.matched)} comparable units between periods.`,
+          tone: momentumScore >= 65 ? "green" : momentumScore >= 45 ? "amber" : "red",
+          icon: "rocket",
+          delta: model.movement,
+          badge: momentumScore >= 65 ? "Strong" : momentumScore >= 45 ? "Watch" : "Needs focus"
+        })}
+        ${renderKpi({
+          label: "At-Risk Population",
+          value: num(model.atRiskPopulation),
+          detail: `${num(model.engagementCounts.longInactive)} long-inactive units`,
+          interpretation: "Adults in units below the under-engaged threshold.",
+          tone: model.atRiskPopulation ? "red" : "green",
+          icon: "alert",
+          badge: model.atRiskPopulation ? "Critical" : "Healthy"
+        })}
+        ${renderKpi({
+          label: "Highest Opportunity Units",
+          value: num(highOpportunityUnits.length),
+          detail: `Below ${pct(opportunityRate)} opportunity benchmark`,
+          interpretation: `${num(model.opportunityPopulation)} adults in below-benchmark units.`,
+          tone: "purple",
+          icon: "target",
+          badge: "High opportunity"
+        })}
+        ${renderKpi({
+          label: "Emerging Success Units",
+          value: num(emergingUnits.length),
+          detail: emergingUnits[0] ? `${emergingUnits[0].unitName}` : "No clear positive outliers",
+          interpretation: "Units with measurable participation lift vs prior period.",
+          tone: "gold",
+          icon: "sparkles",
+          badge: "Emerging success"
+        })}
       </section>
-
-      ${renderRecommendations("Leadership Action Center", "Prescriptive recommendations from measurable SQL-derived conditions.", model.recommendations)}
 
       <section class="grid-two">
         <article class="panel">
           <div class="section-title">
             <h2>Who Is Being Reached?</h2>
-            <p>Age and gender participation distribution.</p>
+            <p>Demographic reach, underrepresentation, and participation gaps.</p>
           </div>
-          ${renderDemographicMatrix(model.ageSegments)}
+          ${renderDemographicCards(model.ageSegments)}
         </article>
         <article class="panel">
           <div class="section-title">
-            <h2>State Of The Ecosystem</h2>
-            <p>Active, recently inactive, and long inactive unit distribution.</p>
+            <h2>Time Effects And Momentum</h2>
+            <p>Prior/current movement and engagement velocity.</p>
           </div>
-          ${renderMovementRibbon(model)}
-          ${renderBarList(model.councilSummary, councilMax)}
+          ${renderMomentumPanel(model, participatingDelta, momentumScore)}
         </article>
       </section>
+
+      ${renderRecommendations("Leadership Action Center", "Prescriptive recommendation cards ranked by measurable SQL-derived conditions.", model.recommendations)}
+
+      ${renderSignalPanels(model, criticalUnits, highOpportunityUnits, emergingUnits)}
 
       <section class="grid-two">
         <article class="panel">
@@ -791,12 +969,28 @@ function renderDrilldownView(model, options, stakeMax, selectedCouncil, centroid
   `;
 }
 
-function renderKpi(label, value, detail, tone) {
+function renderKpi(configOrLabel, value, detail, tone) {
+  const config =
+    typeof configOrLabel === "object"
+      ? configOrLabel
+      : { label: configOrLabel, value, detail, tone, icon: "target", badge: tone === "red" ? "Watch" : "Current" };
+  const delta = Number.isFinite(config.delta) ? config.delta : null;
+  const trendClass = delta === null ? "neutral" : delta >= 0 ? "positive" : "negative";
+  const trendText = delta === null ? "" : delta >= 0 ? "Up" : "Down";
+
   return `
-    <article class="kpi-card tone-${tone}">
-      <span class="kpi-label">${escapeHtml(label)}</span>
-      <strong class="kpi-value">${escapeHtml(value)}</strong>
-      <span class="kpi-detail">${escapeHtml(detail)}</span>
+    <article class="kpi-card tone-${config.tone}">
+      <div class="kpi-topline">
+        <span class="kpi-icon">${iconSvg(config.icon || "target")}</span>
+        ${config.badge ? statusBadge(config.badge, config.tone) : ""}
+      </div>
+      <span class="kpi-label">${escapeHtml(config.label)}</span>
+      <strong class="kpi-value">${escapeHtml(config.value)}</strong>
+      <span class="kpi-detail">
+        ${delta === null ? "" : `<i class="trend-mark ${trendClass}">${iconSvg(delta >= 0 ? "trendUp" : "trendDown")}${trendText}</i>`}
+        ${escapeHtml(config.detail || "")}
+      </span>
+      ${config.interpretation ? `<p class="kpi-interpretation">${escapeHtml(config.interpretation)}</p>` : ""}
     </article>
   `;
 }
@@ -821,20 +1015,177 @@ function renderRecommendation(recommendation) {
       <div class="recommendation-rank">${num(recommendation.priorityRank)}</div>
       <div class="recommendation-body">
         <div class="recommendation-header">
-          <div>
+          <div class="recommendation-title">
             <p class="eyebrow">${escapeHtml(recommendation.issueType)} / ${escapeHtml(recommendation.severity)}</p>
             <h3>${escapeHtml(recommendation.issue)}</h3>
           </div>
+          ${statusBadge(recommendation.severity, severityTone(recommendation.severity))}
         </div>
         <div class="recommendation-grid">
           <div><span>Trend</span><strong>${escapeHtml(recommendation.trend)}</strong></div>
-          <div><span>Condition</span><strong>${escapeHtml(recommendation.condition)}</strong></div>
           <div><span>Impact</span><strong>${escapeHtml(recommendation.impact)}</strong></div>
-          <div><span>Confidence</span><strong>${escapeHtml(recommendation.confidence)}</strong></div>
+          <div><span>Confidence</span><strong>${statusBadge(recommendation.confidence, confidenceTone(recommendation.confidence))}</strong></div>
         </div>
         <div class="action-list">
           ${recommendation.actions.map((action) => `<span>${escapeHtml(action)}</span>`).join("")}
         </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderDemographicCards(segments) {
+  const maxRate = Math.max(...segments.map((segment) => segment.rate || 0), 0.01);
+  const strongestGap = [...segments]
+    .filter((segment) => Number.isFinite(segment.genderGap))
+    .sort((a, b) => Math.abs(b.genderGap) - Math.abs(a.genderGap))[0];
+
+  return `
+    <div class="demographic-grid">
+      ${segments.map((segment) => {
+        const tone = rateTone(segment.rate);
+        const width = Math.min(((segment.rate || 0) / maxRate) * 100, 100);
+        const gap = Number.isFinite(segment.genderGap) ? segment.genderGap : 0;
+        const underrepresented = gap > 0 ? "Men underrepresented" : gap < 0 ? "Women underrepresented" : "Balanced";
+        return `
+          <article class="demographic-card tone-${tone}">
+            <div class="demographic-top">
+              <span>${escapeHtml(segment.shortLabel)}</span>
+              ${statusBadge(segment.rate >= 0.18 ? "Healthy" : segment.rate >= 0.08 ? "Watch" : "Under-engaged", tone)}
+            </div>
+            <strong>${pct(segment.rate)}</strong>
+            <p>${num(segment.participating)} reached of ${num(segment.members)} measured adults.</p>
+            <div class="heat-track"><i style="width: ${width}%"></i></div>
+            <div class="gender-mini">
+              <span>Male ${pct(segment.maleRate)}</span>
+              <span>Female ${pct(segment.femaleRate)}</span>
+            </div>
+            <small>${escapeHtml(underrepresented)}</small>
+          </article>
+        `;
+      }).join("")}
+      ${strongestGap ? `
+        <article class="demographic-callout">
+          <span>${iconSvg("alert")} Underrepresented demographic</span>
+          <strong>${escapeHtml(strongestGap.genderGap > 0 ? `Men in ${strongestGap.shortLabel}` : `Women in ${strongestGap.shortLabel}`)}</strong>
+          <p>${Math.abs(strongestGap.genderGap * 100).toFixed(1)} participation-rate point gap in the current snapshot.</p>
+        </article>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderMomentumPanel(model, participatingDelta, momentumScore) {
+  const priorRate = model.priorSummary.rate || 0;
+  const latestRate = model.latestSummary.rate || 0;
+  const movementTone = model.movement >= 0 ? "green" : "red";
+  const newUnitsTone = model.coverage.newUnits > 0 ? "blue" : "green";
+
+  return `
+    <div class="momentum-grid">
+      <article class="momentum-card tone-${movementTone}">
+        <div>
+          <span>${iconSvg(model.movement >= 0 ? "trendUp" : "trendDown")} Participation velocity</span>
+          ${statusBadge(model.movement >= 0 ? "Improving" : "Declining", movementTone)}
+        </div>
+        <strong>${formatRateDelta(model.movement)}</strong>
+        ${renderSparkline(priorRate, latestRate, movementTone)}
+        <p>${pct(priorRate)} in ${escapeHtml(model.priorPeriod)} to ${pct(latestRate)} now.</p>
+      </article>
+      <article class="momentum-card tone-purple">
+        <div>
+          <span>${iconSvg("rocket")} Momentum score</span>
+          ${statusBadge(momentumScore >= 65 ? "Strong" : momentumScore >= 45 ? "Watch" : "Needs focus", momentumScore >= 65 ? "green" : momentumScore >= 45 ? "amber" : "red")}
+        </div>
+        <strong>${momentumScore}/100</strong>
+        <p>Combines participation movement, comparable coverage, and reached-adult delta.</p>
+      </article>
+      <article class="momentum-card tone-${newUnitsTone}">
+        <div>
+          <span>${iconSvg("repeat")} Comparable coverage</span>
+          ${statusBadge(`${num(model.coverage.matched)} matched`, "blue")}
+        </div>
+        <strong>${num(participatingDelta)}</strong>
+        <p>Reached-adult change with ${num(model.coverage.newUnits)} new units and ${num(model.coverage.priorOnly)} prior-only units.</p>
+      </article>
+      ${renderMovementRibbon(model)}
+    </div>
+  `;
+}
+
+function renderSparkline(priorRate, latestRate, tone) {
+  const min = Math.min(priorRate, latestRate, 0);
+  const max = Math.max(priorRate, latestRate, 0.01);
+  const y = (value) => 42 - ((value - min) / Math.max(max - min, 0.01)) * 34;
+  return `
+    <svg class="sparkline" viewBox="0 0 120 48" role="img" aria-label="Prior to current participation trend">
+      <path d="M8 40H112" class="spark-axis"></path>
+      <path d="M12 ${y(priorRate)} C 42 ${y(priorRate)}, 78 ${y(latestRate)}, 108 ${y(latestRate)}" class="spark-line spark-${tone}"></path>
+      <circle cx="12" cy="${y(priorRate)}" r="3"></circle>
+      <circle cx="108" cy="${y(latestRate)}" r="4"></circle>
+    </svg>
+  `;
+}
+
+function renderSignalPanels(model, criticalUnits, highOpportunityUnits, emergingUnits) {
+  return `
+    <section class="signal-panels">
+      ${renderSignalPanel({
+        title: "Critical Attention Units",
+        subtitle: "Lowest reach or highest severity",
+        tone: "red",
+        icon: "alert",
+        rows: criticalUnits,
+        empty: "No units are currently in critical attention.",
+        metric: (row) => pct(row.rate),
+        detail: (row) => `${num(row.members)} adults / score ${row.opportunityScore.toFixed(1)}`
+      })}
+      ${renderSignalPanel({
+        title: "Highest Opportunity Units",
+        subtitle: "Largest measurable intervention upside",
+        tone: "purple",
+        icon: "target",
+        rows: highOpportunityUnits,
+        empty: "No high-opportunity units for this filter.",
+        metric: (row) => num(row.estimatedLift),
+        detail: (row) => `${pct(row.rate)} reach / ${escapeHtml(row.archetype)}`
+      })}
+      ${renderSignalPanel({
+        title: "Emerging Success Units",
+        subtitle: "Positive movement worth learning from",
+        tone: "green",
+        icon: "sparkles",
+        rows: emergingUnits.slice(0, 8),
+        empty: "No emerging success units for this filter.",
+        metric: (row) => formatRateDelta(row.deltaRate),
+        detail: (row) => `${pct(row.previous?.rate)} to ${pct(row.rate)}`
+      })}
+    </section>
+  `;
+}
+
+function renderSignalPanel({ title, subtitle, tone, icon, rows, empty, metric, detail }) {
+  return `
+    <article class="signal-panel signal-${tone}">
+      <div class="signal-head">
+        <span class="signal-icon">${iconSvg(icon)}</span>
+        <div>
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+      </div>
+      <div class="signal-list">
+        ${rows.length ? rows.slice(0, 5).map((row, index) => `
+          <div class="signal-row">
+            <span class="signal-rank">${index + 1}</span>
+            <div>
+              <strong>${escapeHtml(row.unitName)}</strong>
+              <small>${escapeHtml(row.stakeOrDistrict)}</small>
+            </div>
+            <span class="signal-metric">${metric(row)}</span>
+            <small>${detail(row)}</small>
+          </div>
+        `).join("") : `<p class="signal-empty">${escapeHtml(empty)}</p>`}
       </div>
     </article>
   `;
